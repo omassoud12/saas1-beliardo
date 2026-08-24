@@ -1,4 +1,4 @@
-export function Header({ summary, view, onViewChange }) {
+export function Header({ summary, view, onViewChange, onSignOut }) {
   return (
     <header className="app-header">
       <div className="brand-block">
@@ -30,7 +30,17 @@ export function Header({ summary, view, onViewChange }) {
         >
           Dashboard
         </button>
+        <button
+          type="button"
+          className={view === "business" ? "primary-nav__active" : ""}
+          aria-current={view === "business" ? "page" : undefined}
+          onClick={() => onViewChange("business")}
+        >
+          Business
+        </button>
       </nav>
+
+      <button className="sign-out-button" type="button" onClick={onSignOut}>Sign out</button>
 
       <dl className="hall-summary" aria-label="Hall status">
         <div>

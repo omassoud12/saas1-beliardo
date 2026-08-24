@@ -1,5 +1,6 @@
 import express from "express";
 import dashboardRoutes from "./features/dashboard/dashboard.routes.js";
+import businessRoutes from "./features/business/business.routes.js";
 import healthRoutes from "./features/health/health.routes.js";
 import sessionRoutes from "./features/sessions/session.routes.js";
 import stationRoutes from "./features/stations/station.routes.js";
@@ -16,6 +17,7 @@ export function createApp() {
   app.use("/api/stations", stationRoutes);
   app.use("/api/sessions", sessionRoutes);
   app.use("/api/dashboard", dashboardRoutes);
+  app.use("/api/business", businessRoutes);
   app.use(notFound);
   app.use(errorHandler);
   return app;

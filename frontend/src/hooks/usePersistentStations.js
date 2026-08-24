@@ -80,5 +80,5 @@ export function usePersistentStations() {
     });
   }, [isHydrated, stations]);
 
-  return [stations, setStations];
+  return [stations, setStations, isHydrated];
 }

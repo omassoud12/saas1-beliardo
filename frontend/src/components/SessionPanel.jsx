@@ -20,6 +20,7 @@ export function SessionPanel({
   onPause,
   onResume,
   onEnd,
+  busy = false,
 }) {
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -87,6 +88,7 @@ export function SessionPanel({
         role="dialog"
         aria-modal="true"
         aria-labelledby="session-title"
+        aria-busy={busy}
       >
         <div className="session-panel__accent" aria-hidden="true" />
         <header className="session-panel__header">
@@ -137,6 +139,7 @@ export function SessionPanel({
                 value={station.hourlyRate}
                 onChange={(event) => onRateChange(event.target.value)}
                 aria-describedby="rate-hint"
+                disabled={busy}
               />
             </span>
             <small id="rate-hint">Updates the live total</small>
@@ -149,6 +152,7 @@ export function SessionPanel({
                 type="time"
                 value={formatTimeInput(effectiveStartAt)}
                 onChange={(event) => onStartTimeChange(event.target.value)}
+                disabled={busy}
               />
             </span>
             <small>{isAvailable ? "Set before starting" : "Adjusts elapsed time"}</small>
@@ -157,19 +161,19 @@ export function SessionPanel({
 
         <footer className="session-actions">
           {isAvailable ? (
-            <button className="button button--primary button--wide" type="button" onClick={onStart}>
+            <button className="button button--primary button--wide" type="button" onClick={onStart} disabled={busy}>
               <PlayIcon />
               Start session
             </button>
           ) : (
             <>
               {station.status === "active" ? (
-                <button className="button button--secondary" type="button" onClick={onPause}>
+                <button className="button button--secondary" type="button" onClick={onPause} disabled={busy}>
                   <PauseIcon />
                   Pause
                 </button>
               ) : (
-                <button className="button button--primary" type="button" onClick={onResume}>
+                <button className="button button--primary" type="button" onClick={onResume} disabled={busy}>
                   <PlayIcon />
                   Resume
                 </button>
@@ -178,11 +182,11 @@ export function SessionPanel({
               {confirmingEnd ? (
                 <div className="end-confirmation" role="group" aria-label="Confirm end session">
                   <span>End at {formatMoney(cost)}?</span>
-                  <button type="button" onClick={() => setConfirmingEnd(false)}>Keep open</button>
-                  <button type="button" onClick={onEnd}>End now</button>
+                  <button type="button" onClick={() => setConfirmingEnd(false)} disabled={busy}>Keep open</button>
+                  <button type="button" onClick={onEnd} disabled={busy}>End now</button>
                 </div>
               ) : (
-                <button className="button button--danger" type="button" onClick={() => setConfirmingEnd(true)}>
+                <button className="button button--danger" type="button" onClick={() => setConfirmingEnd(true)} disabled={busy}>
                   <StopIcon />
                   End session
                 </button>

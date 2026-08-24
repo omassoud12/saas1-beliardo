@@ -35,6 +35,34 @@ function zonedTimeToUtc(localParts, timeZone) {
   return new Date(result);
 }
 
+export function getDateRange(date, timeZone) {
+  const [year, month, day] = date.split("-").map(Number);
+  const start = { year, month, day };
+  const end = shiftLocalDate(start, { days: 1 });
+  return {
+    from: zonedTimeToUtc(start, timeZone).toISOString(),
+    to: zonedTimeToUtc(end, timeZone).toISOString(),
+  };
+}
+
+export function getMonthRange(year, month, timeZone) {
+  const start = { year: Number(year), month: Number(month), day: 1 };
+  const end = shiftLocalDate(start, { months: 1 });
+  return {
+    from: zonedTimeToUtc(start, timeZone).toISOString(),
+    to: zonedTimeToUtc(end, timeZone).toISOString(),
+  };
+}
+
+export function getYearRange(year, timeZone) {
+  const start = { year: Number(year), month: 1, day: 1 };
+  const end = { year: Number(year) + 1, month: 1, day: 1 };
+  return {
+    from: zonedTimeToUtc(start, timeZone).toISOString(),
+    to: zonedTimeToUtc(end, timeZone).toISOString(),
+  };
+}
+
 function shiftLocalDate(parts, { days = 0, months = 0, years = 0 } = {}) {
   const date = new Date(Date.UTC(parts.year + years, parts.month - 1 + months, parts.day + days));
   return { year: date.getUTCFullYear(), month: date.getUTCMonth() + 1, day: date.getUTCDate() };
