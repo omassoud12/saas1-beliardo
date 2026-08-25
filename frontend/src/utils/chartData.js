@@ -73,8 +73,7 @@ export function buildConcurrencyBuckets(sessions, period, intervalMinutes = 60) 
     ...(intervalMinutes < 60 ? { minute: "2-digit" } : {}),
   });
   const tooltipFormatter = new Intl.DateTimeFormat("en-US", {
-    timeZone: period.timezone || "UTC", month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit", timeZoneName: "short",
+    timeZone: period.timezone || "UTC", hour: "numeric", minute: "2-digit",
   });
   const rows = [];
   for (let bucketStart = start; bucketStart < end; bucketStart += intervalMs) {

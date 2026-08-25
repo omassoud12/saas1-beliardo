@@ -20,8 +20,12 @@ export function ChartLegend({ hidden, onToggle }) {
 export function AnalyticsTooltip({ active, payload, label, unit, currency = "USD" }) {
   if (!active || !payload?.length) return null;
   const row = payload[0]?.payload ?? {};
-  const format = unit === "currency" ? (value) => formatCurrency(value, currency) : (value) => `${Math.round(Number(value || 0))} sessions`;
-  return <div className="analytics-tooltip" role="status"><strong>{row.tooltipLabel ?? label}</strong>{CHART_SERIES.map((series) => <span key={series.key}><i className={`chart-swatch chart-swatch--${series.key}`} aria-hidden="true" />{series.label}<b>{format(row[series.key])}</b></span>)}<span className="analytics-tooltip__total">Combined total<b>{format(combinedTotal(row))}</b></span></div>;
+  const format = unit === "currency"
+    ? (value) => formatCurrency(value, currency)
+    : unit === "activeSessions"
+      ? (value) => { const count = Math.round(Number(value || 0)); return `${count} active session${count === 1 ? "" : "s"}`; }
+      : (value) => `${Math.round(Number(value || 0))} sessions`;
+  return <div className="analytics-tooltip" role="status"><strong>{row.tooltipLabel ?? label}</strong>{CHART_SERIES.map((series) => <span key={series.key}><i className={`chart-swatch chart-swatch--${series.key}`} aria-hidden="true" />{series.label}<b>{format(row[series.key])}</b></span>)}<span className="analytics-tooltip__total">{unit === "activeSessions" ? "Total" : "Combined total"}<b>{format(combinedTotal(row))}</b></span></div>;
 }
 
 export function ChartDataTable({ data, unit, currency = "USD", caption }) {
@@ -29,9 +33,9 @@ export function ChartDataTable({ data, unit, currency = "USD", caption }) {
   return <details className="chart-data-details"><summary>View accessible data table</summary><div className="analytics-table-wrap"><table className="chart-data-table"><caption className="sr-only">{caption}</caption><thead><tr><th scope="col">Period</th>{CHART_SERIES.map((series) => <th scope="col" key={series.key}>{series.label}</th>)}<th scope="col">Total</th></tr></thead><tbody>{data.map((row) => <tr key={row.key}><th scope="row">{row.label}</th>{CHART_SERIES.map((series) => <td key={series.key}>{format(row[series.key])}</td>)}<td>{format(combinedTotal(row))}</td></tr>)}</tbody></table></div></details>;
 }
 
-export function AnalyticsChartPanel({ titleId, title, description, loading, error, onRetry, hasData, hidden, onToggle, data, unit, currency, children }) {
+export function AnalyticsChartPanel({ titleId, title, description, eyebrow = "Visual analytics", loading, error, onRetry, hasData, hidden, onToggle, data, unit, currency, children }) {
   return <section className="analytics-panel chart-panel" aria-labelledby={titleId} aria-describedby={`${titleId}-description`}>
-    <div className="analytics-panel__heading"><div><p className="eyebrow">Visual analytics</p><h3 id={titleId}>{title}</h3></div><p id={`${titleId}-description`}>{description}</p></div>
+    <div className="analytics-panel__heading"><div><p className="eyebrow">{eyebrow}</p><h3 id={titleId}>{title}</h3></div><p id={`${titleId}-description`}>{description}</p></div>
     {loading ? <ChartSkeleton /> : error ? <ChartErrorState onRetry={onRetry} /> : !hasData ? <ChartEmptyState /> : <>
       <ChartLegend hidden={hidden} onToggle={onToggle} />
       {children}

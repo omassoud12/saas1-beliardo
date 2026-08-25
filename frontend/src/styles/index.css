@@ -2138,6 +2138,7 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   --chart-grid: rgba(230, 234, 222, 0.08);
   --chart-axis: #898f88;
   --chart-tooltip-bg: #171b18;
+  --chart-background: #171b18;
   --chart-crosshair: rgba(230, 234, 222, 0.24);
   --chart-cursor: rgba(230, 234, 222, 0.045);
   padding-top: 22px;
@@ -2476,44 +2477,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   width: 18px;
   height: 3px;
   border-radius: 2px;
-}
-
-.trend-chart-scroll {
-  overflow-x: auto;
-}
-
-.trend-chart {
-  display: block;
-  width: 100%;
-  min-width: 580px;
-  height: auto;
-  overflow: visible;
-}
-
-.chart-gridline {
-  stroke: rgba(230, 234, 222, 0.09);
-  stroke-width: 1;
-}
-
-.chart-axis-label {
-  fill: var(--muted);
-  font-size: 11px;
-}
-
-.chart-line {
-  stroke-width: 2.6;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.chart-point {
-  stroke: var(--surface);
-  stroke-width: 2;
-  cursor: help;
-}
-
-.chart-point:hover {
-  r: 6px;
 }
 
 .chart-empty {
@@ -2889,7 +2852,7 @@ button.calendar-day:hover {
   .period-navigator__today { flex-basis: 100%; }
   .yearly-month-grid { grid-template-columns: 1fr; }
   .yearly-month-grid > button { min-height: 178px; }
-  .business-chart, .business-chart--year { height: 305px; }
+  .business-chart, .business-chart--year { height: 290px; }
   .chart-legend--interactive button { flex: 1 1 calc(50% - 8px); justify-content: center; }
   .chart-skeleton { min-height: 305px; }
   .session-table thead { display: none; }

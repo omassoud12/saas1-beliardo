@@ -1,5 +1,5 @@
 import { ActivityBreakdown } from "../../components/business/ActivityBreakdown";
-import { ActivityAreaChart } from "../../components/business/charts/ActivityAreaChart";
+import { ActivityLineChart } from "../../components/business/charts/ActivityLineChart";
 import { KpiGrid } from "../../components/business/KpiGrid";
 import { PeriodNavigator } from "../../components/business/PeriodNavigator";
 import { SessionTable } from "../../components/business/SessionTable";
@@ -26,7 +26,7 @@ export function DailySummary({ date, onDateChange }) {
       </header>
 
       {query.loading || query.error
-        ? <ActivityAreaChart date={date} loading={query.loading} error={query.error} onRetry={query.retry} />
+        ? <ActivityLineChart date={date} loading={query.loading} error={query.error} onRetry={query.retry} />
         : <DailyContent data={query.data} date={date} />}
     </div>
   );
@@ -53,7 +53,7 @@ function DailyContent({ data, date }) {
         { label: "Revenue", value: formatCurrency(metrics.revenue), description: "Completed-session revenue", icon: "$", emphasis: true },
       ]} />
       <ActivityBreakdown activities={data.activities} total={total} />
-      <ActivityAreaChart sessions={data.concurrencySessions} period={data.period} date={date} />
+      <ActivityLineChart sessions={data.concurrencySessions} period={data.period} date={date} />
       <SessionTable sessions={data.sessions} />
     </>
   );
