@@ -44,4 +44,24 @@ export const businessRepository = {
     throwDatabaseError(openResult.error);
     return [...(openResult.data ?? []), ...(completedResult.data ?? [])];
   },
+
+  async findConcurrencySessions(businessId, range) {
+    const pageSize = 1000;
+    const rows = [];
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await getSupabaseAdmin()
+        .from("sessions")
+        .select(detailFields)
+        .eq("business_id", businessId)
+        .in("status", ["active", "paused", "completed"])
+        .lt("started_at", range.to)
+        .or(`ended_at.gte.${range.from},ended_at.is.null`)
+        .order("started_at", { ascending: true })
+        .range(offset, offset + pageSize - 1);
+      throwDatabaseError(error);
+      rows.push(...(data ?? []));
+      if (!data || data.length < pageSize) break;
+    }
+    return rows;
+  },
 };

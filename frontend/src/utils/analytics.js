@@ -6,9 +6,11 @@ export const ACTIVITY_META = {
 
 export const ACTIVITY_ORDER = ["playstation", "billiard", "pingpong"];
 
-export function formatCurrency(value) {
+export const DEFAULT_CURRENCY = "USD";
+
+export function formatCurrency(value, currency = DEFAULT_CURRENCY) {
   return new Intl.NumberFormat("en-US", {
-    style: "currency", currency: "USD", minimumFractionDigits: 2,
+    style: "currency", currency, minimumFractionDigits: 2,
   }).format(Number(value || 0));
 }
 

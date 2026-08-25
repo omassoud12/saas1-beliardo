@@ -1,8 +1,7 @@
 import { ActivityBreakdown } from "../../components/business/ActivityBreakdown";
-import { AnalyticsError, AnalyticsLoading } from "../../components/business/AnalyticsStates";
+import { YearlyRevenueBarChart } from "../../components/business/charts/YearlyRevenueBarChart";
 import { KpiGrid } from "../../components/business/KpiGrid";
 import { PeriodNavigator } from "../../components/business/PeriodNavigator";
-import { TrendChart } from "../../components/business/TrendChart";
 import { useYearlySummary } from "../../hooks/useBusinessSummary";
 import { ACTIVITY_META, formatCurrency, formatHours, formatMonth } from "../../utils/analytics";
 
@@ -17,7 +16,7 @@ export function YearlySummary({ year, onYearChange, onSelectMonth }) {
           <strong>{year}</strong>
         </PeriodNavigator>
       </header>
-      {query.loading ? <AnalyticsLoading /> : query.error ? <AnalyticsError onRetry={query.retry} /> : (
+      {query.loading || query.error ? <YearlyRevenueBarChart year={year} loading={query.loading} error={query.error} onRetry={query.retry} /> : (
         <YearlyContent data={query.data} year={year} onSelectMonth={onSelectMonth} />
       )}
     </div>
@@ -52,7 +51,7 @@ function YearlyContent({ data, year, onSelectMonth }) {
           ))}
         </div>
       </section>
-      <TrendChart title="Yearly Revenue Trend" subtitle={`Monthly revenue throughout ${year}`} data={data.months} labelFormatter={(key) => formatMonth(Number(key.slice(0, 4)), Number(key.slice(5)), { month: "short" })} />
+      <YearlyRevenueBarChart months={data.months} year={year} currency={data.period.currency} timezone={data.period.timezone} />
     </>
   );
 }

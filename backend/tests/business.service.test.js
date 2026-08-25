@@ -41,6 +41,15 @@ test("daily analytics reconcile activities and expose open session count", async
         station: { type: "billiard", number: 1 },
       }];
     },
+    async findConcurrencySessions() {
+      return [{
+        id: "crossing", status: "completed", hourly_rate: 12,
+        started_at: "2026-08-23T22:30:00Z", paused_at: null,
+        ended_at: "2026-08-24T01:15:00Z", total_paused_seconds: 0,
+        final_elapsed_seconds: 9900, final_cost: 33,
+        station: { type: "billiard", number: 2 },
+      }];
+    },
   };
   const result = await createBusinessService({ repository }).daily({
     businessId: "business-a", timezone: "Asia/Beirut", date: "2026-08-24",
@@ -50,6 +59,8 @@ test("daily analytics reconcile activities and expose open session count", async
   assert.equal(result.metrics.peakActivity, 3);
   assert.equal(result.metrics.revenue, 19);
   assert.equal(result.traffic.length, 24);
+  assert.equal(result.concurrencySessions.length, 1);
+  assert.equal(result.concurrencySessions[0].activity, "billiard");
   assertReconciles(result, result.traffic);
 });
 

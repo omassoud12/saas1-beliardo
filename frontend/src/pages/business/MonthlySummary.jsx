@@ -1,9 +1,9 @@
 import { ActivityBreakdown } from "../../components/business/ActivityBreakdown";
-import { AnalyticsError, AnalyticsLoading } from "../../components/business/AnalyticsStates";
+import { DailyRevenueBarChart } from "../../components/business/charts/DailyRevenueBarChart";
+import { DailyRevenueLineChart } from "../../components/business/charts/DailyRevenueLineChart";
 import { KpiGrid } from "../../components/business/KpiGrid";
 import { MonthlyCalendar } from "../../components/business/MonthlyCalendar";
 import { PeriodNavigator } from "../../components/business/PeriodNavigator";
-import { TrendChart } from "../../components/business/TrendChart";
 import { useMonthlySummary } from "../../hooks/useBusinessSummary";
 import { formatCurrency, formatHours, formatMonth } from "../../utils/analytics";
 
@@ -23,7 +23,7 @@ export function MonthlySummary({ year, month, onPeriodChange, onSelectDay }) {
           <strong>{formatMonth(year, month)}</strong>
         </PeriodNavigator>
       </header>
-      {query.loading ? <AnalyticsLoading /> : query.error ? <AnalyticsError onRetry={query.retry} /> : (
+      {query.loading || query.error ? <div className="business-chart-grid"><DailyRevenueBarChart year={year} month={month} loading={query.loading} error={query.error} onRetry={query.retry} /><DailyRevenueLineChart year={year} month={month} loading={query.loading} error={query.error} onRetry={query.retry} /></div> : (
         <MonthlyContent data={query.data} year={year} month={month} onSelectDay={onSelectDay} />
       )}
     </div>
@@ -43,12 +43,10 @@ function MonthlyContent({ data, year, month, onSelectDay }) {
       ]} />
       <ActivityBreakdown activities={data.activities} total={total} />
       <MonthlyCalendar year={year} month={month} days={data.days} onSelectDay={onSelectDay} />
-      <TrendChart
-        title="Monthly Revenue Movement"
-        subtitle={`Daily revenue throughout ${formatMonth(year, month)}`}
-        data={data.days}
-        labelFormatter={(key) => String(Number(key.slice(-2)))}
-      />
+      <div className="business-chart-grid">
+        <DailyRevenueBarChart days={data.days} year={year} month={month} currency={data.period.currency} />
+        <DailyRevenueLineChart days={data.days} year={year} month={month} currency={data.period.currency} />
+      </div>
     </>
   );
 }

@@ -7,6 +7,7 @@ const activityLabels = {
   billiard: "Billiard",
   pingpong: "Ping Pong",
 };
+const defaultCurrency = "USD";
 
 function round(value, precision = 2) {
   const multiplier = 10 ** precision;
@@ -90,9 +91,10 @@ export function createBusinessService({ repository = businessRepository } = {}) 
   return {
     async daily({ businessId, timezone, date }) {
       const range = getDateRange(date, timezone);
-      const [rows, sessionRows] = await Promise.all([
+      const [rows, sessionRows, concurrencyRows] = await Promise.all([
         repository.aggregate(businessId, range, "hour", timezone),
         repository.findDailySessions(businessId, range),
+        repository.findConcurrencySessions(businessId, range),
       ]);
       const traffic = buildBuckets(
         Array.from({ length: 24 }, (_, hour) => `${date}T${String(hour).padStart(2, "0")}:00`),
@@ -107,7 +109,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
           : best,
       { sessions: 0, key: null });
       return {
-        period: { kind: "day", date, timezone, ...range },
+        period: { kind: "day", date, timezone, currency: defaultCurrency, ...range },
         metrics: {
           totalSessions: completed.total.sessions + openSessionCount,
           completedSessions: completed.total.sessions,
@@ -120,6 +122,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
         activities: completed.activities,
         traffic,
         sessions,
+        concurrencySessions: concurrencyRows.map(mapSession),
       };
     },
 
@@ -129,7 +132,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
       const days = buildBuckets(dayKeys(year, month), rows);
       const summary = summarize(rows);
       return {
-        period: { kind: "month", year, month, timezone, ...range },
+        period: { kind: "month", year, month, timezone, currency: defaultCurrency, ...range },
         metrics: {
           trackedDays: days.filter((day) => day.total.sessions > 0).length,
           sessionCount: summary.total.sessions,
@@ -151,7 +154,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
       const months = buildBuckets(monthKeys(year), monthRows);
       const summary = summarize(monthRows);
       return {
-        period: { kind: "year", year, timezone, ...range },
+        period: { kind: "year", year, timezone, currency: defaultCurrency, ...range },
         metrics: {
           trackedDays: new Set(dayRows.filter((row) => Number(row.session_count) > 0).map((row) => row.bucket_key)).size,
           sessionCount: summary.total.sessions,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "./components/Header";
 import { AuthGate } from "./components/AuthGate";
 import { AccountState } from "./components/AccountState";
@@ -16,8 +16,9 @@ import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
 import { Employees } from "./pages/Employees";
 import { PlatformAdmin } from "./pages/PlatformAdmin";
-import { BusinessAnalytics } from "./pages/business/BusinessAnalytics";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
+
+const BusinessAnalytics = lazy(() => import("./pages/business/BusinessAnalytics").then((module) => ({ default: module.BusinessAnalytics })));
 
 export default function App() {
   return <AuthGate>{({ session, signOut }) => <AccessRouter session={session} onSignOut={signOut} />}</AuthGate>;
@@ -259,7 +260,7 @@ function AuthenticatedApp({ onSignOut, access }) {
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
           />
-        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <BusinessAnalytics onBack={() => handleViewChange("dashboard")} />}
+        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics onBack={() => handleViewChange("dashboard")} /></Suspense>}
       </main>
 
       {selectedStation && (
