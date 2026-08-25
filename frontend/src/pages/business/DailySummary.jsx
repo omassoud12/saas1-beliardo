@@ -1,9 +1,8 @@
 import { ActivityBreakdown } from "../../components/business/ActivityBreakdown";
-import { AnalyticsError, AnalyticsLoading } from "../../components/business/AnalyticsStates";
+import { ActivityAreaChart } from "../../components/business/charts/ActivityAreaChart";
 import { KpiGrid } from "../../components/business/KpiGrid";
 import { PeriodNavigator } from "../../components/business/PeriodNavigator";
 import { SessionTable } from "../../components/business/SessionTable";
-import { TrendChart } from "../../components/business/TrendChart";
 import { useDailySummary } from "../../hooks/useBusinessSummary";
 import { formatCurrency, formatDate, formatHours, shiftDate, todayKey } from "../../utils/analytics";
 
@@ -26,7 +25,9 @@ export function DailySummary({ date, onDateChange }) {
         </PeriodNavigator>
       </header>
 
-      {query.loading ? <AnalyticsLoading /> : query.error ? <AnalyticsError onRetry={query.retry} /> : <DailyContent data={query.data} date={date} />}
+      {query.loading || query.error
+        ? <ActivityAreaChart date={date} loading={query.loading} error={query.error} onRetry={query.retry} />
+        : <DailyContent data={query.data} date={date} />}
     </div>
   );
 }
@@ -51,17 +52,8 @@ function DailyContent({ data, date }) {
         { label: "Peak Activity", value: `${metrics.peakActivity} sessions`, description: metrics.peakActivity ? `Busiest start hour: ${peakLabel}` : "No completed traffic yet", icon: "^" },
         { label: "Revenue", value: formatCurrency(metrics.revenue), description: "Completed-session revenue", icon: "$", emphasis: true },
       ]} />
-      <div className="business-two-column">
-        <ActivityBreakdown activities={data.activities} total={total} />
-        <TrendChart
-          title="Activity by Time"
-          subtitle={`Session starts throughout ${formatDate(date)}`}
-          data={data.traffic}
-          metric="sessions"
-          valueFormatter={(value) => `${value} sessions`}
-          labelFormatter={(key) => `${key.slice(11, 13)}:00`}
-        />
-      </div>
+      <ActivityBreakdown activities={data.activities} total={total} />
+      <ActivityAreaChart sessions={data.concurrencySessions} period={data.period} date={date} />
       <SessionTable sessions={data.sessions} />
     </>
   );
