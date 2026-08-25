@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildConcurrencyBuckets, buildRevenueSeries, normalizeActivityType } from "../src/utils/chartData.js";
+import { buildConcurrencyBuckets, buildMonthlyRevenueData, buildRevenueSeries, normalizeActivityType, summarizeMonthlyRevenue } from "../src/utils/chartData.js";
 import { formatCurrency } from "../src/utils/analytics.js";
 
 const period = { from: "2026-08-24T00:00:00.000Z", to: "2026-08-24T03:00:00.000Z", timezone: "UTC" };
@@ -63,4 +63,33 @@ test("year data keeps all twelve zero-filled months", () => {
 
 test("currency formatting accepts tenant-provided ISO currency codes", () => {
   assert.match(formatCurrency(12500.5, "EUR"), /€|EUR/);
+});
+
+test("current-month future days are null instead of zero", () => {
+  const days = Array.from({ length: 31 }, (_, index) => ({ key: `2026-08-${String(index + 1).padStart(2, "0")}`, activities: [] }));
+  days[9].activities = [{ type: "playstation", revenue: 25 }];
+  const rows = buildMonthlyRevenueData(days, { timezone: "Asia/Beirut", now: new Date("2026-08-15T12:00:00Z") });
+  assert.equal(rows[14].total, 0);
+  assert.equal(rows[15].total, null);
+  assert.equal(rows[15].isFuture, true);
+});
+
+test("monthly summary excludes future dates and calculates active-day metrics", () => {
+  const rows = [
+    { key: "2026-08-01", total: 40, isFuture: false },
+    { key: "2026-08-02", total: 0, isFuture: false },
+    { key: "2026-08-03", total: 80, isFuture: false },
+    { key: "2026-08-04", total: null, isFuture: true },
+  ];
+  const summary = summarizeMonthlyRevenue(rows);
+  assert.equal(summary.monthlyRevenue, 120);
+  assert.equal(summary.averagePerActiveDay, 60);
+  assert.equal(summary.bestDay.key, "2026-08-03");
+});
+
+test("historical leap-year February keeps all 29 observed days", () => {
+  const days = Array.from({ length: 29 }, (_, index) => ({ key: `2024-02-${String(index + 1).padStart(2, "0")}`, activities: [] }));
+  const rows = buildMonthlyRevenueData(days, { timezone: "UTC", now: new Date("2026-01-01T00:00:00Z") });
+  assert.equal(rows.length, 29);
+  assert.equal(rows.every((row) => !row.isFuture && row.total === 0), true);
 });

@@ -32,6 +32,41 @@ export function buildRevenueSeries(buckets, labelFormatter = (key) => key) {
   });
 }
 
+function todayInTimezone(timezone, now) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now).map((part) => [part.type, part.value]));
+  return `${parts.year}-${parts.month}-${parts.day}`;
+}
+
+export function buildMonthlyRevenueData(days, { timezone = "UTC", now = new Date() } = {}) {
+  const today = todayInTimezone(timezone, now);
+  return buildRevenueSeries(days, (key) => String(Number(key.slice(-2)))).map((row) => {
+    const isFuture = row.key > today;
+    if (isFuture) {
+      return { ...row, day: Number(row.label), playstation: null, billiard: null, pingpong: null, total: null, isFuture: true };
+    }
+    const clean = (value) => Math.abs(Number(value || 0)) < 0.005 ? 0 : Number(value || 0);
+    const next = { ...row, day: Number(row.label), isFuture: false };
+    for (const type of ACTIVITY_ORDER) next[type] = clean(next[type]);
+    next.total = ACTIVITY_ORDER.reduce((sum, type) => sum + next[type], 0);
+    return next;
+  });
+}
+
+export function summarizeMonthlyRevenue(data) {
+  const observed = (data ?? []).filter((row) => !row.isFuture);
+  const active = observed.filter((row) => Number(row.total) > 0);
+  const monthlyRevenue = observed.reduce((sum, row) => sum + Number(row.total || 0), 0);
+  const bestDay = active.reduce((best, row) => !best || row.total > best.total ? row : best, null);
+  return {
+    monthlyRevenue,
+    activeDayCount: active.length,
+    averagePerActiveDay: active.length ? monthlyRevenue / active.length : null,
+    bestDay,
+  };
+}
+
 function sessionInterval(session, periodStart, periodEnd) {
   const rawStart = new Date(session.startedAt).getTime();
   if (!Number.isFinite(rawStart)) return null;

@@ -1,6 +1,6 @@
 export function KpiGrid({ items }) {
   return (
-    <section className="business-kpi-grid" aria-label="Key performance indicators">
+    <section className={`business-kpi-grid business-kpi-grid--${items.length}`} aria-label="Key performance indicators">
       {items.map((item) => (
         <article className={`business-kpi ${item.emphasis ? "business-kpi--primary" : ""}`} key={item.label}>
           <div className="business-kpi__topline">
