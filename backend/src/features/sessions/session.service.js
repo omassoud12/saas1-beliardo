@@ -172,10 +172,13 @@ export function createSessionService({
       return present(updated);
     },
 
-    async remove({ businessId, sessionId }) {
+    async remove({ businessId, sessionId, userId, role }) {
       const session = await requireSession(businessId, sessionId);
       if (![SESSION_STATUS.DRAFT, SESSION_STATUS.COMPLETED].includes(session.status)) {
         throw new AppError(409, "Active or paused sessions must be ended first", "INVALID_SESSION_TRANSITION");
+      }
+      if (role === "employee" && (session.status !== SESSION_STATUS.DRAFT || session.createdBy !== userId)) {
+        throw new AppError(403, "Employees can only remove their own draft sessions", "SESSION_DELETE_FORBIDDEN");
       }
       await sessions.remove(businessId, sessionId);
     },

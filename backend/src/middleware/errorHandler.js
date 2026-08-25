@@ -1,6 +1,6 @@
 export function errorHandler(error, _request, response, _next) {
   const statusCode = Number(error.statusCode) || 500;
-  const isOperational = statusCode < 500;
+  const isOperational = statusCode < 500 || error.name === "AppError";
 
   if (!isOperational) console.error(error);
 

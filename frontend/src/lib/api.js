@@ -73,3 +73,59 @@ export async function endSession(sessionId) {
 export async function deleteSession(sessionId) {
   await apiRequest(`/sessions/${sessionId}`, { method: "DELETE" });
 }
+
+export async function fetchMyAccess() {
+  const payload = await apiRequest("/access/me");
+  return payload.data.access;
+}
+
+export async function acceptEmployeeInvitation(token) {
+  const payload = await apiRequest("/employees/invitations/accept", { method: "POST", body: JSON.stringify({ token }) });
+  return payload.data.membership;
+}
+
+export async function fetchEmployees() {
+  const [employees, invitations] = await Promise.all([
+    apiRequest("/employees"), apiRequest("/employees/invitations"),
+  ]);
+  return { employees: employees.data.employees, invitations: invitations.data.invitations };
+}
+
+export async function inviteEmployee(email) {
+  const payload = await apiRequest("/employees/invitations", { method: "POST", body: JSON.stringify({ email }) });
+  return payload.data.invitation;
+}
+
+export async function resendEmployeeInvitation(invitationId) {
+  await apiRequest(`/employees/invitations/${invitationId}/resend`, { method: "POST", body: "{}" });
+}
+
+export async function revokeEmployeeInvitation(invitationId) {
+  await apiRequest(`/employees/invitations/${invitationId}`, { method: "DELETE" });
+}
+
+export async function updateEmployeeStatus(userId, action) {
+  await apiRequest(`/employees/${userId}/status`, { method: "PATCH", body: JSON.stringify({ action }) });
+}
+
+export async function fetchPlatformOwners() {
+  const payload = await apiRequest("/platform/owners");
+  return payload.data.owners;
+}
+
+export async function fetchPlatformUsers() {
+  const payload = await apiRequest("/platform/users");
+  return payload.data.users;
+}
+
+export async function updateOwnerStatus(userId, action) {
+  await apiRequest(`/platform/owners/${userId}/status`, { method: "PATCH", body: JSON.stringify({ action }) });
+}
+
+export async function removePlatformUser(userId) {
+  await apiRequest(`/platform/users/${userId}`, { method: "DELETE" });
+}
+
+export async function updatePlatformUserStatus(userId, action) {
+  await apiRequest(`/platform/users/${userId}/status`, { method: "PATCH", body: JSON.stringify({ action }) });
+}

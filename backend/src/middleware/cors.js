@@ -9,7 +9,7 @@ export function cors(request, response, next) {
     response.setHeader("Vary", "Origin");
   }
 
-  response.setHeader("Access-Control-Allow-Methods", "GET,PUT,OPTIONS");
+  response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Business-Id");
 
   if (request.method === "OPTIONS") return response.sendStatus(204);

@@ -2,11 +2,11 @@ import { useEffect, useState } from "react";
 import { STATION_TYPES, sortStations } from "../data/stationTypes";
 import { fetchStations, syncStations } from "../lib/api";
 
-const STORAGE_KEY = "billiard-hall.stations.v1";
+const storageKeyFor = (businessId) => `billiard-hall.stations.v2.${businessId}`;
 
-function loadStations() {
+function loadStations(storageKey) {
   try {
-    const storedValue = window.localStorage.getItem(STORAGE_KEY);
+    const storedValue = window.localStorage.getItem(storageKey);
     if (!storedValue) return [];
 
     const parsed = JSON.parse(storedValue);
@@ -36,17 +36,18 @@ function loadStations() {
   }
 }
 
-export function usePersistentStations() {
-  const [stations, setStations] = useState(loadStations);
+export function usePersistentStations({ businessId, canManage = true } = {}) {
+  const storageKey = storageKeyFor(businessId);
+  const [stations, setStations] = useState(() => loadStations(storageKey));
   const [isHydrated, setIsHydrated] = useState(false);
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(stations));
+      window.localStorage.setItem(storageKey, JSON.stringify(stations));
     } catch {
       // The application remains usable in memory if storage is unavailable.
     }
-  }, [stations]);
+  }, [stations, storageKey]);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,12 +74,12 @@ export function usePersistentStations() {
   }, []);
 
   useEffect(() => {
-    if (!isHydrated) return;
+    if (!isHydrated || !canManage) return;
 
     syncStations(stations).catch(() => {
       // Local state remains usable if the backend is temporarily unavailable.
     });
-  }, [isHydrated, stations]);
+  }, [canManage, isHydrated, stations]);
 
   return [stations, setStations, isHydrated];
 }

@@ -8,10 +8,8 @@ export function Home({ stations, now, selectedStationId, onSelect, onManageStati
         <div className="empty-state__symbol" aria-hidden="true"><span /></div>
         <p className="eyebrow">Live floor</p>
         <h2>No stations configured yet</h2>
-        <p>Add your first Billiard, Ping Pong, or PlayStation station from the Dashboard.</p>
-        <button className="button button--primary" type="button" onClick={onManageStations}>
-          Configure stations
-        </button>
+        <p>{onManageStations ? "Add your first Billiard, Ping Pong, or PlayStation station from the Dashboard." : "Ask the lounge owner to configure stations."}</p>
+        {onManageStations && <button className="button button--primary" type="button" onClick={onManageStations}>Configure stations</button>}
       </section>
     );
   }

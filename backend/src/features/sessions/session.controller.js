@@ -50,7 +50,7 @@ export const endSession = action("end", "Session ended");
 
 export async function deleteSession(request, response, next) {
   try {
-    await sessionService.remove({ businessId: request.auth.businessId, ...request.validated });
+    await sessionService.remove({ businessId: request.auth.businessId, userId: request.auth.user.id, role: request.auth.role, ...request.validated });
     return sendSuccess(response, { data: {}, message: "Session deleted" });
   } catch (error) { return next(error); }
 }

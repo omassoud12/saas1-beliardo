@@ -15,6 +15,7 @@ export function getEnv() {
       .split(",")
       .map((origin) => origin.trim())
       .filter(Boolean),
+    frontendUrl: process.env.FRONTEND_URL ?? "http://localhost:5173",
     supabaseUrl: process.env.SUPABASE_URL,
     supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY,
   };

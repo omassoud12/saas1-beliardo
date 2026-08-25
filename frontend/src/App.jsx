@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Header } from "./components/Header";
 import { AuthGate } from "./components/AuthGate";
+import { AccountState } from "./components/AccountState";
+import { PasswordSetup } from "./components/PasswordSetup";
 import { SessionPanel } from "./components/SessionPanel";
 import { StationForm } from "./components/stations/StationForm";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
@@ -8,19 +10,61 @@ import { useClock } from "./hooks/useClock";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
   createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
-  resumeSession, startSession, updateSession,
+  resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation,
 } from "./lib/api";
 import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
+import { Employees } from "./pages/Employees";
+import { PlatformAdmin } from "./pages/PlatformAdmin";
 import { BusinessAnalytics } from "./pages/business/BusinessAnalytics";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
 
 export default function App() {
-  return <AuthGate>{({ signOut }) => <AuthenticatedApp onSignOut={signOut} />}</AuthGate>;
+  return <AuthGate>{({ session, signOut }) => <AccessRouter session={session} onSignOut={signOut} />}</AuthGate>;
 }
 
-function AuthenticatedApp({ onSignOut }) {
-  const [stations, setStations, stationsHydrated] = usePersistentStations();
+function AccessRouter({ session, onSignOut }) {
+  const passwordSetupKey = `password-setup.${session.user.id}`;
+  const [result, setResult] = useState({ loading: true, access: null, error: "", needsPassword: false, passwordReason: "invite" });
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const token = params.get("invite");
+        let passwordReason = window.sessionStorage.getItem(passwordSetupKey) || "";
+        if (token) {
+          await acceptEmployeeInvitation(token);
+          passwordReason = "invite";
+          window.sessionStorage.setItem(passwordSetupKey, passwordReason);
+          params.delete("invite");
+        }
+        if (params.get("reset_password") === "1") {
+          passwordReason = "reset";
+          window.sessionStorage.setItem(passwordSetupKey, passwordReason);
+          params.delete("reset_password");
+        }
+        window.history.replaceState({}, "", `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`);
+        const access = await fetchMyAccess();
+        if (mounted) setResult({ loading: false, access, error: "", needsPassword: Boolean(passwordReason), passwordReason: passwordReason || "invite" });
+      } catch (error) {
+        if (mounted) setResult({ loading: false, access: null, error: error.message, needsPassword: false, passwordReason: "invite" });
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [passwordSetupKey, session.user.id]);
+
+  if (result.loading) return <div className="auth-loading" aria-label="Loading account access"><span /></div>;
+  if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={() => { window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, needsPassword: false })); }} />;
+  if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
+  if (result.access.state === "platform_admin") return <PlatformAdmin onSignOut={onSignOut} />;
+  if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;
+  return <AuthenticatedApp onSignOut={onSignOut} access={result.access} />;
+}
+
+function AuthenticatedApp({ onSignOut, access }) {
+  const [stations, setStations, stationsHydrated] = usePersistentStations({ businessId: access.tenant.id, canManage: access.permissions.manageStations });
   const [view, setView] = useState("home");
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [stationForm, setStationForm] = useState(null);
@@ -187,9 +231,11 @@ function AuthenticatedApp({ onSignOut }) {
   }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleViewChange = useCallback((nextView) => {
+    if (nextView !== "home" && nextView !== "employees" && !access.permissions.viewAnalytics) return;
+    if (nextView === "employees" && !access.permissions.manageEmployees) return;
     setSelectedStationId(null);
     setView(nextView);
-  }, []);
+  }, [access.permissions.manageEmployees, access.permissions.viewAnalytics]);
 
   return (
     <div className="app-shell">
@@ -197,23 +243,23 @@ function AuthenticatedApp({ onSignOut }) {
       <div className="ambient ambient--two" aria-hidden="true" />
 
       <main className="dashboard">
-        <Header summary={summary} view={view} onViewChange={handleViewChange} onSignOut={onSignOut} />
+        <Header summary={summary} view={view} onViewChange={handleViewChange} onSignOut={onSignOut} permissions={access.permissions} />
         {view === "home" ? (
           <Home
             stations={stations}
             now={now}
             selectedStationId={selectedStationId}
             onSelect={setSelectedStationId}
-            onManageStations={() => setView("dashboard")}
+            onManageStations={access.permissions.manageStations ? () => setView("dashboard") : null}
           />
-        ) : view === "dashboard" ? (
+        ) : view === "dashboard" && access.permissions.manageStations ? (
           <Dashboard
             stations={stations}
             onAdd={() => setStationForm({ station: null })}
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
           />
-        ) : <BusinessAnalytics onBack={() => handleViewChange("dashboard")} />}
+        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <BusinessAnalytics onBack={() => handleViewChange("dashboard")} />}
       </main>
 
       {selectedStation && (
@@ -239,7 +285,7 @@ function AuthenticatedApp({ onSignOut }) {
         />
       )}
 
-      {stationForm && (
+      {stationForm && access.permissions.manageStations && (
         <StationForm station={stationForm.station} stations={stations} onClose={handleCloseForm} onSave={handleSaveStation} />
       )}
 

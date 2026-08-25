@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { authenticate } from "../../middleware/authenticate.js";
+import { requireApprovedOwner, requireHomeAccess } from "../../middleware/accessGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import {
   createSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
@@ -12,10 +13,11 @@ import {
 
 const router = Router();
 router.use(authenticate);
+router.use(requireHomeAccess);
 
 router.post("/", validateRequest(validateCreateSession), createSession);
 router.get("/active", getActiveSessions);
-router.get("/completed", validateRequest(validateCompletedSessions), getCompletedSessions);
+router.get("/completed", requireApprovedOwner, validateRequest(validateCompletedSessions), getCompletedSessions);
 router.get("/:id", validateRequest(validateSessionId), getSession);
 router.post("/:id/start", validateRequest(validateStartSession), startSession);
 router.post("/:id/pause", validateRequest(validateSessionId), pauseSession);

@@ -1,4 +1,4 @@
-export function Header({ summary, view, onViewChange, onSignOut }) {
+export function Header({ summary, view, onViewChange, onSignOut, permissions }) {
   return (
     <header className="app-header">
       <div className="brand-block">
@@ -22,22 +22,23 @@ export function Header({ summary, view, onViewChange, onSignOut }) {
         >
           Home
         </button>
-        <button
+        {permissions.viewAnalytics && <button
           type="button"
           className={view === "dashboard" ? "primary-nav__active" : ""}
           aria-current={view === "dashboard" ? "page" : undefined}
           onClick={() => onViewChange("dashboard")}
         >
           Dashboard
-        </button>
-        <button
+        </button>}
+        {permissions.manageEmployees && <button type="button" className={view === "employees" ? "primary-nav__active" : ""} aria-current={view === "employees" ? "page" : undefined} onClick={() => onViewChange("employees")}>Employees</button>}
+        {permissions.viewAnalytics && <button
           type="button"
           className={view === "business" ? "primary-nav__active" : ""}
           aria-current={view === "business" ? "page" : undefined}
           onClick={() => onViewChange("business")}
         >
           Business
-        </button>
+        </button>}
       </nav>
 
       <button className="sign-out-button" type="button" onClick={onSignOut}>Sign out</button>
