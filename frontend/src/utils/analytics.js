@@ -35,11 +35,6 @@ export function formatMonth(year, month, options = { month: "long", year: "numer
     .format(new Date(Date.UTC(year, month - 1, 1)));
 }
 
-export function todayKey() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
-
 export function shiftDate(date, amount) {
   const value = new Date(`${date}T12:00:00Z`);
   value.setUTCDate(value.getUTCDate() + amount);

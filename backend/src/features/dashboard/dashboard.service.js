@@ -1,5 +1,8 @@
 import { dashboardRepository } from "./dashboard.repository.js";
-import { getBucketKey, getPeriodRange } from "../../shared/utils/timeRange.js";
+import { AppError } from "../../shared/errors/AppError.js";
+import {
+  getBucketKey, getDefaultChartRange, getPeriodRange, normalizeBusinessRange,
+} from "../../shared/utils/timeRange.js";
 
 function round(value, precision = 2) {
   const multiplier = 10 ** precision;
@@ -40,13 +43,12 @@ export function createDashboardService({ repository = dashboardRepository, clock
       const now = clock();
       let range = { from, to };
       if (!from && !to) {
-        const fallbackStart = new Date(now);
-        if (granularity === "daily") fallbackStart.setUTCDate(fallbackStart.getUTCDate() - 29);
-        if (granularity === "monthly") fallbackStart.setUTCMonth(fallbackStart.getUTCMonth() - 11);
-        range = {
-          from: granularity === "yearly" ? null : fallbackStart.toISOString(),
-          to: new Date(now.getTime() + 1).toISOString(),
-        };
+        range = getDefaultChartRange(granularity, timezone, now);
+      } else {
+        range = normalizeBusinessRange(range, timezone);
+      }
+      if (range.from && range.to && range.from >= range.to) {
+        throw new AppError(400, "from must be before to", "INVALID_DATE_RANGE");
       }
 
       const sessions = await repository.findCompletedSessions(businessId, range);

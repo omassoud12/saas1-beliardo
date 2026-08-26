@@ -80,9 +80,9 @@ function AuthenticatedApp({ onSignOut, access }) {
   const [notice, setNotice] = useState(null);
   const [sessionIds, setSessionIds] = useState({});
   const [finishedToday, setFinishedToday] = useState(0);
+  const [businessDate, setBusinessDate] = useState(access.tenant.businessDate);
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const noticeTimeoutRef = useRef(null);
-  const sessionsHydratedRef = useRef(false);
   const now = useClock();
 
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
@@ -112,20 +112,38 @@ function AuthenticatedApp({ onSignOut, access }) {
   useEffect(() => () => window.clearTimeout(noticeTimeoutRef.current), []);
 
   useEffect(() => {
-    if (!stationsHydrated || sessionsHydratedRef.current) return;
-    sessionsHydratedRef.current = true;
-    fetchActiveSessions().then(({ sessions, finishedToday: finishedCount }) => {
-      const ids = {};
-      for (const session of sessions) ids[session.stationId] = session.id;
-      setSessionIds(ids);
-      setFinishedToday(finishedCount);
-      setStations((currentStations) => currentStations.map((station) => {
-        const session = sessions.find((item) => item.stationId === station.id);
-        return session ? stationFromSession(station, session) : station;
-      }));
-    }).catch(() => {
-      // Station configuration can still load from local storage while signed out.
-    });
+    if (!stationsHydrated) return undefined;
+    let cancelled = false;
+    let boundaryTimer;
+    async function syncSessions() {
+      try {
+        const status = await fetchActiveSessions();
+        if (cancelled) return;
+        const ids = {};
+        for (const session of status.sessions) ids[session.stationId] = session.id;
+        setSessionIds(ids);
+        setFinishedToday(status.finishedToday);
+        setBusinessDate(status.businessDate);
+        setStations((currentStations) => currentStations.map((station) => {
+          const session = status.sessions.find((item) => item.stationId === station.id);
+          if (session) return stationFromSession(station, session);
+          return ["active", "paused"].includes(station.status) ? resetStationSession(station) : station;
+        }));
+        const boundaryTimestamp = new Date(status.nextBusinessDayAt).getTime();
+        const delay = Number.isFinite(boundaryTimestamp)
+          ? Math.max(1000, boundaryTimestamp - Date.now() + 100)
+          : 60_000;
+        boundaryTimer = window.setTimeout(syncSessions, Math.min(delay, 2_147_000_000));
+      } catch {
+        // Station configuration can still load from local storage if sync fails.
+        if (!cancelled) boundaryTimer = window.setTimeout(syncSessions, 30_000);
+      }
+    }
+    syncSessions();
+    return () => {
+      cancelled = true;
+      window.clearTimeout(boundaryTimer);
+    };
   }, [setStations, stationsHydrated]);
 
   const handleSaveStation = useCallback((values) => {
@@ -272,7 +290,7 @@ function AuthenticatedApp({ onSignOut, access }) {
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
           />
-        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics onBack={() => handleViewChange("dashboard")} /></Suspense>}
+        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} onBack={() => handleViewChange("dashboard")} /></Suspense>}
       </main>
 
       {selectedStation && (

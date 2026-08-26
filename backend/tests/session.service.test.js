@@ -112,7 +112,7 @@ test("finished count uses the lounge's current calendar day", async () => {
 
   assert.equal(count, 4);
   assert.deepEqual(receivedRange, {
-    from: "2026-08-27T21:00:00.000Z",
-    to: "2026-08-28T21:00:00.000Z",
+    from: "2026-08-27T03:00:00.000Z",
+    to: "2026-08-28T03:00:00.000Z",
   });
 });

@@ -1,4 +1,5 @@
 import { permissionsForAccess } from "../../shared/constants/access.js";
+import { getBusinessDateKey } from "../../shared/utils/timeRange.js";
 import { accessRepository } from "./access.repository.js";
 
 export function getAccessState(auth) {
@@ -23,7 +24,12 @@ export function getAccessState(auth) {
       accountStatus: auth.profile.account_status,
       requiresPasswordSetup: Boolean(auth.profile.requires_password_setup),
     },
-    tenant: auth.businessId ? { id: auth.businessId, status: auth.businessStatus, timezone: auth.timezone } : null,
+    tenant: auth.businessId ? {
+      id: auth.businessId,
+      status: auth.businessStatus,
+      timezone: auth.timezone,
+      businessDate: getBusinessDateKey(new Date(), auth.timezone),
+    } : null,
     membership: auth.role ? { role: auth.role, status: auth.membershipStatus } : null,
     permissions: permissionsForAccess({ role: auth.role, isPlatformAdmin: auth.isPlatformAdmin, active }),
   };

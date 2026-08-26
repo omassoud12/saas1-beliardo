@@ -6,19 +6,20 @@ import { PeriodNavigator } from "../../components/business/PeriodNavigator";
 import { useMonthlySummary } from "../../hooks/useBusinessSummary";
 import { formatHours, formatMonth } from "../../utils/analytics";
 
-export function MonthlySummary({ year, month, onPeriodChange, onSelectDay }) {
+export function MonthlySummary({ year, month, businessDate, onPeriodChange, onSelectDay }) {
   const query = useMonthlySummary(year, month);
   const move = (amount) => {
     const value = new Date(Date.UTC(year, month - 1 + amount, 1));
     onPeriodChange(value.getUTCFullYear(), value.getUTCMonth() + 1);
   };
-  const current = new Date();
+  const currentYear = Number(businessDate.slice(0, 4));
+  const currentMonth = Number(businessDate.slice(5, 7));
 
   return (
     <div className="business-view">
       <header className="business-page-header">
         <div><p className="eyebrow">Business / Monthly</p><h2>Monthly Summary</h2><p>{formatMonth(year, month)}</p></div>
-        <PeriodNavigator label="month" currentLabel="Current month" onPrevious={() => move(-1)} onNext={() => move(1)} onCurrent={() => onPeriodChange(current.getFullYear(), current.getMonth() + 1)}>
+        <PeriodNavigator label="month" currentLabel="Current month" onPrevious={() => move(-1)} onNext={() => move(1)} onCurrent={() => onPeriodChange(currentYear, currentMonth)}>
           <strong>{formatMonth(year, month)}</strong>
         </PeriodNavigator>
       </header>

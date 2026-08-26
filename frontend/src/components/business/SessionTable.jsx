@@ -1,11 +1,11 @@
 import { formatCurrency, formatDuration } from "../../utils/analytics";
 
-function formatTime(value) {
+function formatTime(value, timezone) {
   if (!value) return "In progress";
-  return new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  return new Intl.DateTimeFormat("en-US", { timeZone: timezone, hour: "numeric", minute: "2-digit" }).format(new Date(value));
 }
 
-export function SessionTable({ sessions }) {
+export function SessionTable({ sessions, timezone }) {
   return (
     <section className="analytics-panel session-list" aria-labelledby="completed-activity-title">
       <div className="analytics-panel__heading">
@@ -20,7 +20,7 @@ export function SessionTable({ sessions }) {
             <thead><tr><th scope="col">Time</th><th scope="col">Activity</th><th scope="col">Duration</th><th scope="col">Revenue</th><th scope="col">Status</th></tr></thead>
             <tbody>{sessions.map((session) => (
               <tr key={session.id}>
-                <td data-label="Time"><strong>{formatTime(session.startedAt)}</strong><span>&rarr; {formatTime(session.endedAt)}</span></td>
+                <td data-label="Time"><strong>{formatTime(session.startedAt, timezone)}</strong><span>&rarr; {formatTime(session.endedAt, timezone)}</span></td>
                 <td data-label="Activity"><span className={`activity-dot activity-dot--${session.activity}`} />{session.activityLabel}<small>Station {session.stationNumber}</small></td>
                 <td data-label="Duration">{session.status === "completed" ? formatDuration(session.durationSeconds) : "Running"}</td>
                 <td data-label="Revenue">{session.status === "completed" ? formatCurrency(session.revenue) : "—"}</td>

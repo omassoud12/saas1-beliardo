@@ -46,6 +46,8 @@ export async function fetchActiveSessions() {
   return {
     sessions: payload.data.sessions,
     finishedToday: Number(payload.data.finishedToday) || 0,
+    businessDate: payload.data.businessDate,
+    nextBusinessDayAt: payload.data.nextBusinessDayAt,
   };
 }
 

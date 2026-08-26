@@ -1,7 +1,7 @@
 import { stationRepository } from "../stations/station.repository.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { SESSION_STATUS } from "../../shared/constants/session.js";
-import { getPeriodRange } from "../../shared/utils/timeRange.js";
+import { getPeriodRange, normalizeBusinessRange } from "../../shared/utils/timeRange.js";
 import { sessionRepository } from "./session.repository.js";
 
 function elapsedSeconds(session, at) {
@@ -69,12 +69,19 @@ export function createSessionService({
       return (await sessions.findActive(businessId)).map(present);
     },
 
-    async getFinishedToday({ businessId, timezone }) {
-      return sessions.countCompleted(businessId, getPeriodRange("today", timezone, clock()));
+    async getFinishedToday({ businessId, timezone, at = clock() }) {
+      return sessions.countCompleted(businessId, getPeriodRange("today", timezone, at));
     },
 
-    async getCompleted({ businessId, filters }) {
-      return (await sessions.findCompleted(businessId, filters)).map(present);
+    async getCompleted({ businessId, timezone, filters }) {
+      const range = normalizeBusinessRange(filters, timezone);
+      if (range.from && range.to && range.from >= range.to) {
+        throw new AppError(400, "from must be before to", "INVALID_DATE_RANGE");
+      }
+      return (await sessions.findCompleted(businessId, {
+        ...filters,
+        ...range,
+      })).map(present);
     },
 
     async start({ businessId, sessionId, startTime }) {

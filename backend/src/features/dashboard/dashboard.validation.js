@@ -2,6 +2,10 @@ import { CHART_GRANULARITIES, DASHBOARD_PERIODS } from "../../shared/constants/s
 
 function parseOptionalDate(value, field) {
   if (!value) return { value: undefined };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const dateOnly = new Date(`${value}T00:00:00.000Z`);
+    return dateOnly.toISOString().slice(0, 10) === value ? { value } : { error: `${field} must be a valid ISO date` };
+  }
   const date = new Date(value);
   return Number.isNaN(date.getTime())
     ? { error: `${field} must be a valid ISO date` }

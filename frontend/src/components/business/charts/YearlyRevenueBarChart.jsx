@@ -12,12 +12,13 @@ function MonthTick({ x, y, payload, currentLabel }) {
   return <g transform={`translate(${x},${y})`}><text y={14} textAnchor="middle" fill={current ? "var(--text-soft)" : "var(--chart-axis)"} fontSize="11" fontWeight={current ? "700" : "400"}>{payload.value}</text>{current && <circle cy={23} r="2" fill="var(--chart-billiard)" />}</g>;
 }
 
-export function YearlyRevenueBarChart({ months = [], year, currency = "USD", timezone = "UTC", loading = false, error = null, onRetry }) {
+export function YearlyRevenueBarChart({ months = [], year, currency = "USD", businessDate = "", loading = false, error = null, onRetry }) {
   const data = useMemo(() => buildRevenueSeries(months, (key) => formatMonth(Number(key.slice(0, 4)), Number(key.slice(5)), { month: "short" })), [months]);
   const { hidden, toggle } = useChartSeries();
   const description = `Monthly revenue throughout ${year}`;
-  const nowParts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: timezone, year: "numeric", month: "numeric" }).formatToParts(new Date()).map((part) => [part.type, part.value]));
-  const currentLabel = year === Number(nowParts.year) ? formatMonth(year, Number(nowParts.month), { month: "short" }) : "";
+  const currentYear = Number(businessDate.slice(0, 4));
+  const currentMonth = Number(businessDate.slice(5, 7));
+  const currentLabel = year === currentYear ? formatMonth(year, currentMonth, { month: "short" }) : "";
   return <AnalyticsChartPanel titleId="yearly-revenue-overview-title" title="Yearly Revenue Overview" description={description} loading={loading} error={error} onRetry={onRetry} hasData={hasChartData(data)} hidden={hidden} onToggle={toggle} data={data} unit="currency" currency={currency}>
     <div className="business-chart business-chart--year" role="img" aria-label={`Yearly revenue overview. ${description}`}>
       <ResponsiveContainer width="100%" height="100%">

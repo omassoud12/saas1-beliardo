@@ -1,12 +1,11 @@
 import { useState } from "react";
 import { BusinessNavbar } from "../../components/business/BusinessNavbar";
-import { todayKey } from "../../utils/analytics";
 import { DailySummary } from "./DailySummary";
 import { MonthlySummary } from "./MonthlySummary";
 import { YearlySummary } from "./YearlySummary";
 
-export function BusinessAnalytics({ onBack }) {
-  const initialDate = todayKey();
+export function BusinessAnalytics({ businessDate, onBack }) {
+  const initialDate = businessDate;
   const [section, setSection] = useState("daily");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedMonth, setSelectedMonth] = useState(Number(initialDate.slice(5, 7)));
@@ -26,11 +25,12 @@ export function BusinessAnalytics({ onBack }) {
   return (
     <section className="business-analytics">
       <BusinessNavbar section={section} onBack={onBack} onSectionChange={setSection} />
-      {section === "daily" && <DailySummary date={selectedDate} onDateChange={selectDate} />}
+      {section === "daily" && <DailySummary date={selectedDate} businessDate={businessDate} onDateChange={selectDate} />}
       {section === "monthly" && (
         <MonthlySummary
           year={selectedYear}
           month={selectedMonth}
+          businessDate={businessDate}
           onPeriodChange={selectMonth}
           onSelectDay={(date) => { selectDate(date); setSection("daily"); }}
         />
@@ -38,6 +38,7 @@ export function BusinessAnalytics({ onBack }) {
       {section === "yearly" && (
         <YearlySummary
           year={selectedYear}
+          businessDate={businessDate}
           onYearChange={setSelectedYear}
           onSelectMonth={(month) => { setSelectedMonth(month); setSection("monthly"); }}
         />

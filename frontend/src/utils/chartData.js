@@ -32,17 +32,9 @@ export function buildRevenueSeries(buckets, labelFormatter = (key) => key) {
   });
 }
 
-function todayInTimezone(timezone, now) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
-    timeZone: timezone || "UTC", year: "numeric", month: "2-digit", day: "2-digit",
-  }).formatToParts(now).map((part) => [part.type, part.value]));
-  return `${parts.year}-${parts.month}-${parts.day}`;
-}
-
-export function buildMonthlyRevenueData(days, { timezone = "UTC", now = new Date() } = {}) {
-  const today = todayInTimezone(timezone, now);
+export function buildMonthlyRevenueData(days, { businessDate = "9999-12-31" } = {}) {
   return buildRevenueSeries(days, (key) => String(Number(key.slice(-2)))).map((row) => {
-    const isFuture = row.key > today;
+    const isFuture = row.key > businessDate;
     if (isFuture) {
       return { ...row, day: Number(row.label), playstation: null, billiard: null, pingpong: null, total: null, isFuture: true };
     }

@@ -1,4 +1,5 @@
 import { sendSuccess } from "../../shared/utils/response.js";
+import { getBusinessDateKey, getPeriodRange } from "../../shared/utils/timeRange.js";
 import { sessionService } from "./session.service.js";
 
 export async function createSession(request, response, next) {
@@ -21,20 +22,28 @@ export async function getSession(request, response, next) {
 
 export async function getActiveSessions(request, response, next) {
   try {
+    const now = new Date();
+    const businessDate = getBusinessDateKey(now, request.auth.timezone);
+    const nextBusinessDayAt = getPeriodRange("today", request.auth.timezone, now).to;
     const [sessions, finishedToday] = await Promise.all([
       sessionService.getActive({ businessId: request.auth.businessId }),
       sessionService.getFinishedToday({
         businessId: request.auth.businessId,
         timezone: request.auth.timezone,
+        at: now,
       }),
     ]);
-    return sendSuccess(response, { data: { sessions, finishedToday } });
+    return sendSuccess(response, { data: { sessions, finishedToday, businessDate, nextBusinessDayAt } });
   } catch (error) { return next(error); }
 }
 
 export async function getCompletedSessions(request, response, next) {
   try {
-    const sessions = await sessionService.getCompleted({ businessId: request.auth.businessId, filters: request.validated });
+    const sessions = await sessionService.getCompleted({
+      businessId: request.auth.businessId,
+      timezone: request.auth.timezone,
+      filters: request.validated,
+    });
     return sendSuccess(response, { data: { sessions } });
   } catch (error) { return next(error); }
 }

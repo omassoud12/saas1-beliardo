@@ -10,6 +10,10 @@ function failure(...errors) {
 
 function parseDate(value, field, { optional = true } = {}) {
   if ((value === undefined || value === null || value === "") && optional) return { value: undefined };
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const dateOnly = new Date(`${value}T00:00:00.000Z`);
+    return dateOnly.toISOString().slice(0, 10) === value ? { value } : { error: `${field} must be a valid ISO date` };
+  }
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return { error: `${field} must be a valid ISO date` };
   return { value: date.toISOString() };
@@ -74,6 +78,6 @@ export function validateCompletedSessions(request) {
   if (from.error) errors.push(from.error);
   if (to.error) errors.push(to.error);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) errors.push("limit must be between 1 and 100");
-  if (from.value && to.value && from.value >= to.value) errors.push("from must be before to");
+  if (from.value && to.value && new Date(from.value).getTime() >= new Date(to.value).getTime()) errors.push("from must be before to");
   return errors.length ? failure(...errors) : success({ from: from.value, to: to.value, limit });
 }

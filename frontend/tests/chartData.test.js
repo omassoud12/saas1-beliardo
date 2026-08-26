@@ -68,10 +68,20 @@ test("currency formatting accepts tenant-provided ISO currency codes", () => {
 test("current-month future days are null instead of zero", () => {
   const days = Array.from({ length: 31 }, (_, index) => ({ key: `2026-08-${String(index + 1).padStart(2, "0")}`, activities: [] }));
   days[9].activities = [{ type: "playstation", revenue: 25 }];
-  const rows = buildMonthlyRevenueData(days, { timezone: "Asia/Beirut", now: new Date("2026-08-15T12:00:00Z") });
+  const rows = buildMonthlyRevenueData(days, { businessDate: "2026-08-15" });
   assert.equal(rows[14].total, 0);
   assert.equal(rows[15].total, null);
   assert.equal(rows[15].isFuture, true);
+});
+
+test("before 06:00 the frontend honors the backend's previous business date", () => {
+  const days = [
+    { key: "2026-08-26", activities: [] },
+    { key: "2026-08-27", activities: [] },
+  ];
+  const rows = buildMonthlyRevenueData(days, { businessDate: "2026-08-26" });
+  assert.equal(rows[0].isFuture, false);
+  assert.equal(rows[1].isFuture, true);
 });
 
 test("monthly summary excludes future dates and calculates active-day metrics", () => {
@@ -89,7 +99,7 @@ test("monthly summary excludes future dates and calculates active-day metrics", 
 
 test("historical leap-year February keeps all 29 observed days", () => {
   const days = Array.from({ length: 29 }, (_, index) => ({ key: `2024-02-${String(index + 1).padStart(2, "0")}`, activities: [] }));
-  const rows = buildMonthlyRevenueData(days, { timezone: "UTC", now: new Date("2026-01-01T00:00:00Z") });
+  const rows = buildMonthlyRevenueData(days, { businessDate: "2026-01-01" });
   assert.equal(rows.length, 29);
   assert.equal(rows.every((row) => !row.isFuture && row.total === 0), true);
 });

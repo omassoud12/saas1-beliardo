@@ -29,7 +29,7 @@ function DayTick({ x, y, payload, lastDay, futureDays }) {
 }
 
 export function MonthlyRevenueChart({ days = [], period, year, month, currency = "USD", loading = false, error = null, onRetry }) {
-  const data = useMemo(() => buildMonthlyRevenueData(days, { timezone: period?.timezone }), [days, period?.timezone]);
+  const data = useMemo(() => buildMonthlyRevenueData(days, { businessDate: period?.businessDate }), [days, period?.businessDate]);
   const metrics = useMemo(() => summarizeMonthlyRevenue(data), [data]);
   const { hidden, toggle } = useChartSeries();
   const monthLabel = formatMonth(year, month);

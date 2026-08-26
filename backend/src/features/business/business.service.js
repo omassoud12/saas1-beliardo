@@ -1,5 +1,7 @@
 import { businessRepository } from "./business.repository.js";
-import { getDateRange, getMonthRange, getYearRange } from "../../shared/utils/timeRange.js";
+import {
+  getBusinessDateKey, getDateRange, getHourlyBucketKeys, getMonthRange, getYearRange,
+} from "../../shared/utils/timeRange.js";
 
 const activityTypes = ["playstation", "billiard", "pingpong"];
 const activityLabels = {
@@ -87,7 +89,7 @@ function dayKeys(year, month) {
   );
 }
 
-export function createBusinessService({ repository = businessRepository } = {}) {
+export function createBusinessService({ repository = businessRepository, clock = () => new Date() } = {}) {
   return {
     async daily({ businessId, timezone, date }) {
       const range = getDateRange(date, timezone);
@@ -96,10 +98,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
         repository.findDailySessions(businessId, range),
         repository.findConcurrencySessions(businessId, range),
       ]);
-      const traffic = buildBuckets(
-        Array.from({ length: 24 }, (_, hour) => `${date}T${String(hour).padStart(2, "0")}:00`),
-        rows,
-      );
+      const traffic = buildBuckets(getHourlyBucketKeys(range), rows);
       const completed = summarize(rows);
       const sessions = sessionRows.map(mapSession);
       const openSessionCount = sessions.filter((session) => session.status !== "completed").length;
@@ -109,7 +108,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
           : best,
       { sessions: 0, key: null });
       return {
-        period: { kind: "day", date, timezone, currency: defaultCurrency, ...range },
+        period: { kind: "day", date, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
           totalSessions: completed.total.sessions + openSessionCount,
           completedSessions: completed.total.sessions,
@@ -132,7 +131,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
       const days = buildBuckets(dayKeys(year, month), rows);
       const summary = summarize(rows);
       return {
-        period: { kind: "month", year, month, timezone, currency: defaultCurrency, ...range },
+        period: { kind: "month", year, month, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
           trackedDays: days.filter((day) => day.total.sessions > 0).length,
           sessionCount: summary.total.sessions,
@@ -154,7 +153,7 @@ export function createBusinessService({ repository = businessRepository } = {}) 
       const months = buildBuckets(monthKeys(year), monthRows);
       const summary = summarize(monthRows);
       return {
-        period: { kind: "year", year, timezone, currency: defaultCurrency, ...range },
+        period: { kind: "year", year, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
           trackedDays: new Set(dayRows.filter((row) => Number(row.session_count) > 0).map((row) => row.bucket_key)).size,
           sessionCount: summary.total.sessions,

@@ -20,15 +20,15 @@ test("dashboard summary applies business timezone range and totals", async () =>
     clock: () => new Date("2026-08-24T12:00:00.000Z"),
   });
   const summary = await service.getSummary({ businessId: "business-a", timezone: "Asia/Beirut", period: "month" });
-  assert.equal(receivedRange.from, "2026-07-31T21:00:00.000Z");
-  assert.equal(receivedRange.to, "2026-08-31T21:00:00.000Z");
+  assert.equal(receivedRange.from, "2026-08-01T03:00:00.000Z");
+  assert.equal(receivedRange.to, "2026-09-01T03:00:00.000Z");
   assert.equal(summary.revenue, 20);
   assert.equal(summary.totalHours, 1.5);
   assert.equal(summary.sessionCount, 2);
   assert.deepEqual(summary.sessionsByType, { billiard: 1, pingpong: 0, playstation: 1 });
 });
 
-test("daily chart buckets completed sessions in the business timezone", async () => {
+test("daily chart buckets completed sessions by 06:00 business date", async () => {
   const repository = {
     async findCompletedSessions() { return completed; },
     async getOperationalCounts() { return {}; },
@@ -38,7 +38,8 @@ test("daily chart buckets completed sessions in the business timezone", async ()
     businessId: "business-a", timezone: "Asia/Beirut", granularity: "daily",
     from: "2026-08-01T00:00:00.000Z", to: "2026-09-01T00:00:00.000Z",
   });
-  assert.deepEqual(chart.data, [{
-    key: "2026-08-24", revenue: 20, totalSeconds: 5400, sessionCount: 2, totalHours: 1.5,
-  }]);
+  assert.deepEqual(chart.data, [
+    { key: "2026-08-23", revenue: 12, totalSeconds: 3600, sessionCount: 1, totalHours: 1 },
+    { key: "2026-08-24", revenue: 8, totalSeconds: 1800, sessionCount: 1, totalHours: 0.5 },
+  ]);
 });

@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
+import { BUSINESS_DAY_START_HOUR } from "../../shared/utils/timeRange.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 
 const detailFields = `
@@ -15,6 +16,7 @@ export const businessRepository = {
       p_to: range.to,
       p_bucket: bucket,
       p_timezone: timezone,
+      p_business_day_start_hour: BUSINESS_DAY_START_HOUR,
     });
     throwDatabaseError(error);
     return data ?? [];
@@ -35,7 +37,6 @@ export const businessRepository = {
         .select(detailFields)
         .eq("business_id", businessId)
         .in("status", ["active", "paused"])
-        .gte("started_at", range.from)
         .lt("started_at", range.to)
         .order("started_at", { ascending: false })
         .limit(100),

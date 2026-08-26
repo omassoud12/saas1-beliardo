@@ -5,9 +5,9 @@ import { PeriodNavigator } from "../../components/business/PeriodNavigator";
 import { useYearlySummary } from "../../hooks/useBusinessSummary";
 import { ACTIVITY_META, formatCurrency, formatHours, formatMonth } from "../../utils/analytics";
 
-export function YearlySummary({ year, onYearChange, onSelectMonth }) {
+export function YearlySummary({ year, businessDate, onYearChange, onSelectMonth }) {
   const query = useYearlySummary(year);
-  const currentYear = new Date().getFullYear();
+  const currentYear = Number(businessDate.slice(0, 4));
   return (
     <div className="business-view">
       <header className="business-page-header">
@@ -51,7 +51,7 @@ function YearlyContent({ data, year, onSelectMonth }) {
           ))}
         </div>
       </section>
-      <YearlyRevenueBarChart months={data.months} year={year} currency={data.period.currency} timezone={data.period.timezone} />
+      <YearlyRevenueBarChart months={data.months} year={year} currency={data.period.currency} businessDate={data.period.businessDate} />
     </>
   );
 }
