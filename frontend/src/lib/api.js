@@ -18,7 +18,13 @@ export async function apiRequest(path, options = {}) {
   });
 
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.message ?? "API request failed");
+  if (!response.ok) {
+    const error = new Error(payload.message ?? "API request failed");
+    error.code = payload.error?.code;
+    error.details = payload.error?.details;
+    error.hint = payload.error?.hint;
+    throw error;
+  }
   return payload;
 }
 
@@ -82,6 +88,10 @@ export async function fetchMyAccess() {
 export async function acceptEmployeeInvitation(token) {
   const payload = await apiRequest("/employees/invitations/accept", { method: "POST", body: JSON.stringify({ token }) });
   return payload.data.membership;
+}
+
+export async function completePasswordSetup() {
+  await apiRequest("/access/password-configured", { method: "POST", body: "{}" });
 }
 
 export async function fetchEmployees() {

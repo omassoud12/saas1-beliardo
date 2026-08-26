@@ -1,4 +1,5 @@
 import { permissionsForAccess } from "../../shared/constants/access.js";
+import { accessRepository } from "./access.repository.js";
 
 export function getAccessState(auth) {
   const status = auth.profile.account_status;
@@ -6,6 +7,7 @@ export function getAccessState(auth) {
 
   if (auth.isPlatformAdmin && status === "approved") state = "platform_admin";
   else if (status === "approved" && auth.membershipStatus === "disabled") state = "disabled";
+  else if (status === "approved" && auth.role === "employee" && auth.profile.requires_password_setup) state = "password_setup_required";
   else if (status === "approved" && auth.role === "owner" && auth.membershipStatus === "active" && auth.businessStatus === "approved") state = "approved_owner";
   else if (status === "approved" && auth.role === "employee" && auth.membershipStatus === "active" && auth.businessStatus === "approved") state = "active_employee";
   else if (status === "approved") state = "no_access";
@@ -19,9 +21,14 @@ export function getAccessState(auth) {
       fullName: auth.profile.full_name,
       accountType: auth.profile.account_type,
       accountStatus: auth.profile.account_status,
+      requiresPasswordSetup: Boolean(auth.profile.requires_password_setup),
     },
     tenant: auth.businessId ? { id: auth.businessId, status: auth.businessStatus, timezone: auth.timezone } : null,
     membership: auth.role ? { role: auth.role, status: auth.membershipStatus } : null,
     permissions: permissionsForAccess({ role: auth.role, isPlatformAdmin: auth.isPlatformAdmin, active }),
   };
+}
+
+export function completePasswordSetup(userId, repository = accessRepository) {
+  return repository.markPasswordConfigured(userId);
 }

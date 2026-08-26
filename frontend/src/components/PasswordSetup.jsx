@@ -12,9 +12,13 @@ export function PasswordSetup({ onComplete, onSignOut, reason = "invite" }) {
       return;
     }
     setStatus({ pending: true, error: "" });
-    const { error } = await supabase.auth.updateUser({ password: form.password });
-    if (error) setStatus({ pending: false, error: error.message });
-    else onComplete();
+    try {
+      const { error } = await supabase.auth.updateUser({ password: form.password });
+      if (error) throw error;
+      await onComplete();
+    } catch (error) {
+      setStatus({ pending: false, error: error.message || "Unable to complete password setup." });
+    }
   };
 
   return (

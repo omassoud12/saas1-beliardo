@@ -21,12 +21,29 @@ alter table public.stations
   add column if not exists business_id uuid references public.businesses(id) on delete cascade;
 
 alter table public.stations drop constraint if exists stations_type_number_key;
-alter table public.stations drop constraint if exists stations_business_type_number_key;
-alter table public.stations
-  add constraint stations_business_type_number_key unique (business_id, type, number);
-alter table public.stations drop constraint if exists stations_id_business_key;
-alter table public.stations
-  add constraint stations_id_business_key unique (id, business_id);
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.stations'::regclass
+      and conname = 'stations_business_type_number_key'
+  ) then
+    alter table public.stations
+      add constraint stations_business_type_number_key unique (business_id, type, number);
+  end if;
+
+  if not exists (
+    select 1
+    from pg_constraint
+    where conrelid = 'public.stations'::regclass
+      and conname = 'stations_id_business_key'
+  ) then
+    alter table public.stations
+      add constraint stations_id_business_key unique (id, business_id);
+  end if;
+end;
+$$;
 
 create table if not exists public.sessions (
   id uuid primary key default gen_random_uuid(),
@@ -139,29 +156,39 @@ end;
 $$;
 
 drop trigger if exists on_auth_user_created_business on auth.users;
-create trigger on_auth_user_created_business
-after insert on auth.users
-for each row execute function public.handle_new_business_user();
+do $$
+begin
+  -- Later migrations replace the single-role bootstrap with the SaaS profile
+  -- trigger. Do not restore this legacy trigger when this migration is rerun.
+  if to_regclass('public.profiles') is null then
+    execute 'create trigger on_auth_user_created_business
+      after insert on auth.users
+      for each row execute function public.handle_new_business_user()';
+  end if;
+end;
+$$;
 
 do $$
 declare
   existing_user record;
   new_business_id uuid;
 begin
-  for existing_user in
-    select u.id, u.raw_user_meta_data
-    from auth.users u
-    where not exists (
-      select 1 from public.business_members bm where bm.user_id = u.id
-    )
-  loop
-    insert into public.businesses (name, created_by)
-    values (coalesce(existing_user.raw_user_meta_data ->> 'business_name', 'My Billiard Hall'), existing_user.id)
-    returning id into new_business_id;
+  if to_regclass('public.profiles') is null then
+    for existing_user in
+      select u.id, u.raw_user_meta_data
+      from auth.users u
+      where not exists (
+        select 1 from public.business_members bm where bm.user_id = u.id
+      )
+    loop
+      insert into public.businesses (name, created_by)
+      values (coalesce(existing_user.raw_user_meta_data ->> 'business_name', 'My Billiard Hall'), existing_user.id)
+      returning id into new_business_id;
 
-    insert into public.business_members (business_id, user_id, role)
-    values (new_business_id, existing_user.id, 'owner');
-  end loop;
+      insert into public.business_members (business_id, user_id, role)
+      values (new_business_id, existing_user.id, 'owner');
+    end loop;
+  end if;
 end;
 $$;
 

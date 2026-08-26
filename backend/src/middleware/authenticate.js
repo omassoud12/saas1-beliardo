@@ -22,7 +22,7 @@ export function createAuthenticate({ getAdminClient = getSupabaseAdmin } = {}) {
       if (requestedBusinessId) membershipQuery = membershipQuery.eq("business_id", requestedBusinessId);
 
       const [profileResult, platformResult, membershipResult] = await Promise.all([
-        supabase.from("profiles").select("id, email, full_name, account_type, account_status").eq("id", user.id).maybeSingle(),
+        supabase.from("profiles").select("id, email, full_name, account_type, account_status, requires_password_setup").eq("id", user.id).maybeSingle(),
         supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
         membershipQuery.order("joined_at", { ascending: true }).limit(1),
       ]);

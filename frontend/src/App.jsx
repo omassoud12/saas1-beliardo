@@ -10,7 +10,7 @@ import { useClock } from "./hooks/useClock";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
   createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
-  resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation,
+  resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
 import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
@@ -26,6 +26,7 @@ export default function App() {
 
 function AccessRouter({ session, onSignOut }) {
   const passwordSetupKey = `password-setup.${session.user.id}`;
+  const invitationAcceptanceRef = useRef({ token: null, promise: null });
   const [result, setResult] = useState({ loading: true, access: null, error: "", needsPassword: false, passwordReason: "invite" });
   useEffect(() => {
     let mounted = true;
@@ -35,7 +36,13 @@ function AccessRouter({ session, onSignOut }) {
         const token = params.get("invite");
         let passwordReason = window.sessionStorage.getItem(passwordSetupKey) || "";
         if (token) {
-          await acceptEmployeeInvitation(token);
+          if (invitationAcceptanceRef.current.token !== token) {
+            invitationAcceptanceRef.current = {
+              token,
+              promise: acceptEmployeeInvitation(token),
+            };
+          }
+          await invitationAcceptanceRef.current.promise;
           passwordReason = "invite";
           window.sessionStorage.setItem(passwordSetupKey, passwordReason);
           params.delete("invite");
@@ -47,7 +54,8 @@ function AccessRouter({ session, onSignOut }) {
         }
         window.history.replaceState({}, "", `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`);
         const access = await fetchMyAccess();
-        if (mounted) setResult({ loading: false, access, error: "", needsPassword: Boolean(passwordReason), passwordReason: passwordReason || "invite" });
+        const requiresPassword = Boolean(passwordReason || access.profile.requiresPasswordSetup);
+        if (mounted) setResult({ loading: false, access, error: "", needsPassword: requiresPassword, passwordReason: passwordReason || "invite" });
       } catch (error) {
         if (mounted) setResult({ loading: false, access: null, error: error.message, needsPassword: false, passwordReason: "invite" });
       }
@@ -57,7 +65,7 @@ function AccessRouter({ session, onSignOut }) {
   }, [passwordSetupKey, session.user.id]);
 
   if (result.loading) return <div className="auth-loading" aria-label="Loading account access"><span /></div>;
-  if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={() => { window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, needsPassword: false })); }} />;
+  if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={async () => { await completePasswordSetup(); const access = await fetchMyAccess(); window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, access, needsPassword: false })); }} />;
   if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
   if (result.access.state === "platform_admin") return <PlatformAdmin onSignOut={onSignOut} />;
   if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;

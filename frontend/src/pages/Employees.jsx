@@ -9,11 +9,11 @@ export function Employees() {
   useEffect(() => { load(); }, [load]);
   const run = async (action, message) => {
     setStatus({ busy: true, error: "", message: "" });
-    try { await action(); await load(); setStatus({ busy: false, error: "", message }); } catch (error) { setStatus({ busy: false, error: error.message, message: "" }); }
+    try { await action(); await load(); setStatus({ busy: false, error: "", message }); return true; } catch (error) { setStatus({ busy: false, error: error.message, message: "" }); return false; }
   };
   return <section className="configuration-page access-page">
-    <div className="configuration-page__heading"><div><p className="eyebrow">Team access</p><h2>Employees</h2><p>Invite staff to operate live sessions. Analytics and configuration remain owner-only.</p></div></div>
-    <form className="inline-access-form" onSubmit={(event) => { event.preventDefault(); const value = email; run(() => inviteEmployee(value), "Invitation sent").then(() => setEmail("")); }}>
+    <div className="configuration-page__heading"><div><p className="eyebrow">Team access</p><h2>Employees</h2><p>Send a secure one-time invitation. The employee chooses their own password and receives Home and session access only.</p></div></div>
+    <form className="inline-access-form" onSubmit={async (event) => { event.preventDefault(); const sent = await run(() => inviteEmployee(email), "Invitation sent"); if (sent) setEmail(""); }}>
       <input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="employee@example.com" aria-label="Employee email" />
       <button className="button button--primary" disabled={status.busy}>Send invitation</button>
     </form>

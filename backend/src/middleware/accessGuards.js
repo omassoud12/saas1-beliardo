@@ -2,6 +2,7 @@ import { AppError } from "../shared/errors/AppError.js";
 
 function rejectForStatus(request) {
   const status = request.auth?.profile?.account_status;
+  if (request.auth?.profile?.requires_password_setup) return new AppError(403, "Set a password before continuing", "PASSWORD_SETUP_REQUIRED");
   if (request.auth?.membershipStatus === "disabled") return new AppError(403, "Tenant membership is disabled", "MEMBERSHIP_DISABLED");
   if (["suspended", "deleted", "rejected"].includes(request.auth?.businessStatus)) return new AppError(403, "Tenant is not active", "TENANT_INACTIVE");
   const codes = {
@@ -22,6 +23,7 @@ export function requirePlatformAdmin(request, _response, next) {
 export function requireApprovedOwner(request, _response, next) {
   if (
     request.auth?.profile?.account_status === "approved"
+    && !request.auth.profile.requires_password_setup
     && request.auth.role === "owner"
     && request.auth.membershipStatus === "active"
     && request.auth.businessStatus === "approved"
@@ -32,6 +34,7 @@ export function requireApprovedOwner(request, _response, next) {
 export function requireHomeAccess(request, _response, next) {
   if (
     request.auth?.profile?.account_status === "approved"
+    && !request.auth.profile.requires_password_setup
     && ["owner", "employee"].includes(request.auth.role)
     && request.auth.membershipStatus === "active"
     && request.auth.businessStatus === "approved"
