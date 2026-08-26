@@ -206,6 +206,7 @@ input,
 
 .hall-summary__active dd { color: var(--accent-bright); }
 .hall-summary__paused dd { color: var(--amber); }
+.hall-summary__finished dd { color: #8fc7b0; }
 
 .tables-section {
   padding-top: 36px;
@@ -1939,7 +1940,8 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 
   .hall-summary div:first-child,
-  .hall-summary .hall-summary__active {
+  .hall-summary .hall-summary__active,
+  .hall-summary .hall-summary__finished {
     display: flex;
     min-width: 62px;
     padding-inline: 8px;

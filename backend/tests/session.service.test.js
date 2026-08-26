@@ -33,6 +33,7 @@ function createHarness() {
       ) ?? null;
     },
     async findActive() { return []; },
+    async countCompleted() { return 0; },
     async findCompleted() { return []; },
     async update(_businessId, id, values) {
       const record = records.get(id);
@@ -91,4 +92,27 @@ test("invalid lifecycle transitions are rejected", async () => {
     service.end({ businessId: "business-1", sessionId: created.id }),
     (error) => error.statusCode === 409 && error.code === "INVALID_SESSION_TRANSITION",
   );
+});
+
+test("finished count uses the lounge's current calendar day", async () => {
+  let receivedRange;
+  const sessions = {
+    async countCompleted(_businessId, range) { receivedRange = range; return 4; },
+  };
+  const service = createSessionService({
+    sessions,
+    stations: {},
+    clock: () => new Date("2026-08-27T22:30:00.000Z"),
+  });
+
+  const count = await service.getFinishedToday({
+    businessId: "business-1",
+    timezone: "Asia/Beirut",
+  });
+
+  assert.equal(count, 4);
+  assert.deepEqual(receivedRange, {
+    from: "2026-08-27T21:00:00.000Z",
+    to: "2026-08-28T21:00:00.000Z",
+  });
 });

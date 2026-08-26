@@ -43,7 +43,10 @@ export async function syncStations(stations) {
 
 export async function fetchActiveSessions() {
   const payload = await apiRequest("/sessions/active");
-  return payload.data.sessions;
+  return {
+    sessions: payload.data.sessions,
+    finishedToday: Number(payload.data.finishedToday) || 0,
+  };
 }
 
 export async function createSession(stationId, hourlyRate) {

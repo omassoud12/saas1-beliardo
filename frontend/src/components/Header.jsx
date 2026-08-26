@@ -60,6 +60,10 @@ export function Header({ summary, view, onViewChange, onSignOut, permissions }) 
           <dt>Available</dt>
           <dd>{summary.available}</dd>
         </div>
+        <div className="hall-summary__finished">
+          <dt>Finished</dt>
+          <dd>{summary.finished}</dd>
+        </div>
       </dl>
     </header>
   );

@@ -1,6 +1,7 @@
 import { stationRepository } from "../stations/station.repository.js";
 import { AppError } from "../../shared/errors/AppError.js";
 import { SESSION_STATUS } from "../../shared/constants/session.js";
+import { getPeriodRange } from "../../shared/utils/timeRange.js";
 import { sessionRepository } from "./session.repository.js";
 
 function elapsedSeconds(session, at) {
@@ -66,6 +67,10 @@ export function createSessionService({
 
     async getActive({ businessId }) {
       return (await sessions.findActive(businessId)).map(present);
+    },
+
+    async getFinishedToday({ businessId, timezone }) {
+      return sessions.countCompleted(businessId, getPeriodRange("today", timezone, clock()));
     },
 
     async getCompleted({ businessId, filters }) {

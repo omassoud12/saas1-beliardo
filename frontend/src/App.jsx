@@ -79,6 +79,7 @@ function AuthenticatedApp({ onSignOut, access }) {
   const [stationForm, setStationForm] = useState(null);
   const [notice, setNotice] = useState(null);
   const [sessionIds, setSessionIds] = useState({});
+  const [finishedToday, setFinishedToday] = useState(0);
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const noticeTimeoutRef = useRef(null);
   const sessionsHydratedRef = useRef(false);
@@ -93,7 +94,8 @@ function AuthenticatedApp({ onSignOut, access }) {
     active: stations.filter((station) => station.status === "active").length,
     paused: stations.filter((station) => station.status === "paused").length,
     available: stations.filter((station) => station.status === "available").length,
-  }), [stations]);
+    finished: finishedToday,
+  }), [finishedToday, stations]);
 
   const updateSelectedStation = useCallback((updater) => {
     setStations((currentStations) => sortStations(currentStations.map((station) => (
@@ -112,10 +114,11 @@ function AuthenticatedApp({ onSignOut, access }) {
   useEffect(() => {
     if (!stationsHydrated || sessionsHydratedRef.current) return;
     sessionsHydratedRef.current = true;
-    fetchActiveSessions().then((sessions) => {
+    fetchActiveSessions().then(({ sessions, finishedToday: finishedCount }) => {
       const ids = {};
       for (const session of sessions) ids[session.stationId] = session.id;
       setSessionIds(ids);
+      setFinishedToday(finishedCount);
       setStations((currentStations) => currentStations.map((station) => {
         const session = sessions.find((item) => item.stationId === station.id);
         return session ? stationFromSession(station, session) : station;
@@ -231,6 +234,7 @@ function AuthenticatedApp({ onSignOut, access }) {
         return next;
       });
       setSelectedStationId(null);
+      setFinishedToday((current) => current + 1);
       showNotice(`${getStationName(currentStation)} closed · Final total ${formatMoney(session.finalCost)}`);
     } catch (error) {
       showNotice(error.message || "Unable to end session");

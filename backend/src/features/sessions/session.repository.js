@@ -81,6 +81,19 @@ export const sessionRepository = {
     return data.map(mapSession);
   },
 
+  async countCompleted(businessId, { from, to }) {
+    let query = getSupabaseAdmin()
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("business_id", businessId)
+      .eq("status", "completed");
+    if (from) query = query.gte("ended_at", from);
+    if (to) query = query.lt("ended_at", to);
+    const { count, error } = await query;
+    throwDatabaseError(error);
+    return count ?? 0;
+  },
+
   async findCompleted(businessId, { from, to, limit = 50 }) {
     let query = getSupabaseAdmin()
       .from("sessions")

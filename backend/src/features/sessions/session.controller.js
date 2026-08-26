@@ -21,8 +21,14 @@ export async function getSession(request, response, next) {
 
 export async function getActiveSessions(request, response, next) {
   try {
-    const sessions = await sessionService.getActive({ businessId: request.auth.businessId });
-    return sendSuccess(response, { data: { sessions } });
+    const [sessions, finishedToday] = await Promise.all([
+      sessionService.getActive({ businessId: request.auth.businessId }),
+      sessionService.getFinishedToday({
+        businessId: request.auth.businessId,
+        timezone: request.auth.timezone,
+      }),
+    ]);
+    return sendSuccess(response, { data: { sessions, finishedToday } });
   } catch (error) { return next(error); }
 }
 
