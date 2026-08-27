@@ -63,6 +63,17 @@ export const resumeSession = action("resume", "Session resumed");
 export const updateSession = action("update", "Session updated");
 export const endSession = action("end", "Session ended");
 
+export async function cancelSession(request, response, next) {
+  try {
+    const session = await sessionService.cancel({
+      businessId: request.auth.businessId,
+      userId: request.auth.user.id,
+      ...request.validated,
+    });
+    return sendSuccess(response, { data: { session }, message: "Session cancelled" });
+  } catch (error) { return next(error); }
+}
+
 export async function deleteSession(request, response, next) {
   try {
     await sessionService.remove({ businessId: request.auth.businessId, userId: request.auth.user.id, role: request.auth.role, ...request.validated });

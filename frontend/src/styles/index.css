@@ -727,6 +727,24 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   padding: 18px 28px;
 }
 
+.session-actions--live {
+  align-items: stretch;
+  flex-direction: column;
+}
+
+.session-actions__primary,
+.cancel-session-area {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.cancel-session-area {
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .button {
   display: inline-flex;
   align-items: center;
@@ -782,6 +800,20 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   background: rgba(220, 116, 109, 0.07);
 }
 
+.button--cancel {
+  min-height: 38px;
+  border-color: rgba(220, 116, 109, 0.24);
+  background: transparent;
+  color: #c9827d;
+  font-size: 0.76rem;
+}
+
+.button--cancel:hover {
+  border-color: rgba(220, 116, 109, 0.42);
+  background: rgba(220, 116, 109, 0.045);
+  color: #e98a83;
+}
+
 .button--wide {
   min-width: 180px;
 }
@@ -816,6 +848,54 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 .end-confirmation button:last-child {
+  background: var(--danger);
+  color: #23100f;
+}
+
+.cancel-confirmation {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  padding: 14px;
+  border: 1px solid rgba(220, 116, 109, 0.28);
+  border-radius: var(--radius-sm);
+  background: rgba(72, 37, 34, 0.42);
+  animation: confirmation-in 150ms ease-out both;
+}
+
+.cancel-confirmation strong {
+  color: #edc4c0;
+  font-size: 0.82rem;
+}
+
+.cancel-confirmation p {
+  margin: 5px 0 0;
+  color: #bca19e;
+  font-size: 0.72rem;
+  line-height: 1.45;
+}
+
+.cancel-confirmation__actions {
+  display: flex;
+  gap: 8px;
+}
+
+.cancel-confirmation__actions button {
+  min-height: 38px;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 0.72rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.cancel-confirmation__actions button:last-child {
+  border-color: var(--danger);
   background: var(--danger);
   color: #23100f;
 }
@@ -1163,12 +1243,27 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 
   .end-confirmation {
-    position: absolute;
-    right: 18px;
-    bottom: 70px;
-    left: 18px;
+    position: static;
+    flex: 1;
+    flex-wrap: wrap;
     justify-content: flex-end;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .session-actions__primary {
+    align-items: stretch;
+  }
+
+  .cancel-confirmation {
+    grid-template-columns: 1fr;
+  }
+
+  .cancel-confirmation__actions {
+    width: 100%;
+  }
+
+  .cancel-confirmation__actions button {
+    flex: 1;
   }
 }
 

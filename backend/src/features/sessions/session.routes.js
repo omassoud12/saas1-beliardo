@@ -3,7 +3,7 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { requireApprovedOwner, requireHomeAccess } from "../../middleware/accessGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import {
-  createSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
+  cancelSession, createSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
   getSession, pauseSession, resumeSession, startSession, updateSession,
 } from "./session.controller.js";
 import {
@@ -23,6 +23,7 @@ router.post("/:id/start", validateRequest(validateStartSession), startSession);
 router.post("/:id/pause", validateRequest(validateSessionId), pauseSession);
 router.post("/:id/resume", validateRequest(validateSessionId), resumeSession);
 router.patch("/:id", validateRequest(validateUpdateSession), updateSession);
+router.post("/:id/cancel", validateRequest(validateSessionId), cancelSession);
 router.post("/:id/end", validateRequest(validateSessionId), endSession);
 router.delete("/:id", validateRequest(validateSessionId), deleteSession);
 

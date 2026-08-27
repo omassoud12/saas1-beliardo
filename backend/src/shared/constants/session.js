@@ -3,6 +3,7 @@ export const SESSION_STATUS = Object.freeze({
   ACTIVE: "active",
   PAUSED: "paused",
   COMPLETED: "completed",
+  CANCELLED: "cancelled",
 });
 
 export const OPEN_SESSION_STATUSES = [

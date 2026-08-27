@@ -6,7 +6,7 @@ import { PasswordSetup } from "./components/PasswordSetup";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
-  createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
+  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
   resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
 import { Home } from "./pages/Home";
@@ -83,6 +83,7 @@ function AuthenticatedApp({ onSignOut, access }) {
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const noticeTimeoutRef = useRef(null);
   const latestSessionsRef = useRef(null);
+  const cancellationPendingRef = useRef(false);
 
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
   const handleClosePanel = useCallback(() => setSelectedStationId(null), []);
@@ -271,6 +272,34 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
   }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
 
+  const handleCancel = useCallback(async () => {
+    const currentStation = stations.find((station) => station.id === selectedStationId);
+    const sessionId = sessionIds[selectedStationId];
+    if (!currentStation || !sessionId || sessionActionPending || cancellationPendingRef.current) {
+      if (!sessionActionPending && !cancellationPendingRef.current) showNotice("Live session record not found");
+      return;
+    }
+    cancellationPendingRef.current = true;
+    setSessionActionPending(true);
+    try {
+      await cancelSession(sessionId);
+      latestSessionsRef.current = latestSessionsRef.current?.filter((session) => session.id !== sessionId) ?? null;
+      updateSelectedStation(resetStationSession);
+      setSessionIds((current) => {
+        const next = { ...current };
+        delete next[currentStation.id];
+        return next;
+      });
+      setSelectedStationId(null);
+      showNotice(`${getStationName(currentStation)} session cancelled`);
+    } catch (error) {
+      showNotice(error.message || "Unable to cancel session");
+    } finally {
+      cancellationPendingRef.current = false;
+      setSessionActionPending(false);
+    }
+  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
+
   const handleViewChange = useCallback((nextView) => {
     if (nextView !== "home" && nextView !== "employees" && !access.permissions.viewAnalytics) return;
     if (nextView === "employees" && !access.permissions.manageEmployees) return;
@@ -323,6 +352,7 @@ function AuthenticatedApp({ onSignOut, access }) {
           onPause={handlePause}
           onResume={handleResume}
           onEnd={handleEnd}
+          onCancel={handleCancel}
           busy={sessionActionPending}
         /></Suspense>
       )}

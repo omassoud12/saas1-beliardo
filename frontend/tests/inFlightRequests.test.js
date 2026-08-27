@@ -38,3 +38,21 @@ test("authenticated request keys isolate users, tenants, and refreshed tokens", 
   assert.notEqual(baseline, createAuthenticatedRequestKey({ accessToken: "token-a", userId: "user-a", tenantId: "tenant-b", path: "/stations" }));
   assert.notEqual(baseline, createAuthenticatedRequestKey({ accessToken: "token-b", userId: "user-a", tenantId: "tenant-a", path: "/stations" }));
 });
+
+test("double cancellation confirmation reuses one mutation request", async () => {
+  const requests = createInFlightRequestCache();
+  let calls = 0;
+  let resolveCancellation;
+  const cancel = () => requests.run("session-1", () => {
+    calls += 1;
+    return new Promise((resolve) => { resolveCancellation = resolve; });
+  });
+
+  const first = cancel();
+  const second = cancel();
+  assert.equal(first, second);
+  await Promise.resolve();
+  assert.equal(calls, 1);
+  resolveCancellation({ status: "cancelled" });
+  assert.equal((await second).status, "cancelled");
+});

@@ -20,12 +20,15 @@ export function SessionPanel({
   onPause,
   onResume,
   onEnd,
+  onCancel,
   busy = false,
 }) {
   const now = useClock();
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
-  const [confirmingEnd, setConfirmingEnd] = useState(false);
+  const safeActionRef = useRef(null);
+  const [confirmationMode, setConfirmationMode] = useState(null);
+  const confirmationModeRef = useRef(null);
   const isAvailable = station.status === "available";
   const elapsed = getElapsedSeconds(station, now);
   const cost = getCurrentCost(station, now);
@@ -47,7 +50,8 @@ export function SessionPanel({
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        onClose();
+        if (confirmationModeRef.current) setConfirmationMode(null);
+        else onClose();
         return;
       }
 
@@ -76,8 +80,13 @@ export function SessionPanel({
   }, [onClose]);
 
   useEffect(() => {
-    setConfirmingEnd(false);
+    setConfirmationMode(null);
   }, [station.id, station.status]);
+
+  useEffect(() => {
+    confirmationModeRef.current = confirmationMode;
+    if (confirmationMode) safeActionRef.current?.focus();
+  }, [confirmationMode]);
 
   return (
     <div className="session-overlay" role="presentation" onMouseDown={(event) => {
@@ -160,7 +169,7 @@ export function SessionPanel({
           </label>
         </div>
 
-        <footer className="session-actions">
+        <footer className={`session-actions${isAvailable ? "" : " session-actions--live"}`}>
           {isAvailable ? (
             <button className="button button--primary button--wide" type="button" onClick={onStart} disabled={busy}>
               <PlayIcon />
@@ -168,30 +177,51 @@ export function SessionPanel({
             </button>
           ) : (
             <>
-              {station.status === "active" ? (
-                <button className="button button--secondary" type="button" onClick={onPause} disabled={busy}>
-                  <PauseIcon />
-                  Pause
-                </button>
-              ) : (
-                <button className="button button--primary" type="button" onClick={onResume} disabled={busy}>
-                  <PlayIcon />
-                  Resume
-                </button>
-              )}
+              <div className="session-actions__primary">
+                {station.status === "active" ? (
+                  <button className="button button--secondary" type="button" onClick={onPause} disabled={busy}>
+                    <PauseIcon />
+                    Pause
+                  </button>
+                ) : (
+                  <button className="button button--primary" type="button" onClick={onResume} disabled={busy}>
+                    <PlayIcon />
+                    Resume
+                  </button>
+                )}
 
-              {confirmingEnd ? (
-                <div className="end-confirmation" role="group" aria-label="Confirm end session">
-                  <span>End at {formatMoney(cost)}?</span>
-                  <button type="button" onClick={() => setConfirmingEnd(false)} disabled={busy}>Keep open</button>
-                  <button type="button" onClick={onEnd} disabled={busy}>End now</button>
-                </div>
-              ) : (
-                <button className="button button--danger" type="button" onClick={() => setConfirmingEnd(true)} disabled={busy}>
-                  <StopIcon />
-                  End session
-                </button>
-              )}
+                {confirmationMode === "end" ? (
+                  <div className="end-confirmation" role="group" aria-label="Confirm end session">
+                    <span>End at {formatMoney(cost)}?</span>
+                    <button ref={safeActionRef} type="button" onClick={() => setConfirmationMode(null)} disabled={busy}>Keep open</button>
+                    <button type="button" onClick={onEnd} disabled={busy}>End now</button>
+                  </div>
+                ) : (
+                  <button className="button button--danger" type="button" onClick={() => setConfirmationMode("end")} disabled={busy || confirmationMode === "cancel"}>
+                    <StopIcon />
+                    End session
+                  </button>
+                )}
+              </div>
+
+              <div className="cancel-session-area">
+                {confirmationMode === "cancel" ? (
+                  <div className="cancel-confirmation" role="alertdialog" aria-labelledby="cancel-session-title" aria-describedby="cancel-session-description">
+                    <div>
+                      <strong id="cancel-session-title">Cancel this session?</strong>
+                      <p id="cancel-session-description">This will reset the station and discard the session’s elapsed time and cost. It will not be included in completed sessions, revenue, or reports.</p>
+                    </div>
+                    <div className="cancel-confirmation__actions">
+                      <button ref={safeActionRef} type="button" onClick={() => setConfirmationMode(null)} disabled={busy}>Keep session</button>
+                      <button type="button" onClick={onCancel} disabled={busy}>{busy ? "Cancelling…" : "Cancel session"}</button>
+                    </div>
+                  </div>
+                ) : (
+                  <button className="button button--cancel" type="button" onClick={() => setConfirmationMode("cancel")} disabled={busy || confirmationMode === "end"}>
+                    Cancel session
+                  </button>
+                )}
+              </div>
             </>
           )}
         </footer>

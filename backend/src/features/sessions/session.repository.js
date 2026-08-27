@@ -13,6 +13,8 @@ export function mapSession(row) {
     startedAt: row.started_at,
     pausedAt: row.paused_at,
     endedAt: row.ended_at,
+    cancelledAt: row.cancelled_at ?? null,
+    cancelledBy: row.cancelled_by ?? null,
     totalPausedSeconds: Number(row.total_paused_seconds) || 0,
     finalElapsedSeconds: row.final_elapsed_seconds === null ? null : Number(row.final_elapsed_seconds),
     finalCost: row.final_cost === null ? null : Number(row.final_cost),
@@ -25,7 +27,7 @@ export function mapSession(row) {
 
 const selectFields = `
   id, business_id, station_id, status, hourly_rate, started_at, paused_at,
-  ended_at, total_paused_seconds, final_elapsed_seconds, final_cost,
+  ended_at, cancelled_at, cancelled_by, total_paused_seconds, final_elapsed_seconds, final_cost,
   created_by, created_at, updated_at,
   station:stations(id, type, number, hourly_rate, status)
 `;
@@ -121,6 +123,20 @@ export const sessionRepository = {
       .single();
     throwDatabaseError(error);
     return mapSession(data);
+  },
+
+  async cancel(businessId, sessionId, cancelledBy) {
+    const { data, error } = await getSupabaseAdmin().rpc("cancel_session", {
+      p_business_id: businessId,
+      p_session_id: sessionId,
+      p_cancelled_by: cancelledBy,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "not_found", session_record: null };
+    return {
+      outcome: result.outcome,
+      session: mapSession(result.session_record),
+    };
   },
 
   async remove(businessId, sessionId) {

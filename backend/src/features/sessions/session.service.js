@@ -31,13 +31,18 @@ export function createSessionService({
   }
 
   function present(session) {
-    const seconds = session.status === SESSION_STATUS.COMPLETED
-      ? session.finalElapsedSeconds
-      : elapsedSeconds(session, clock());
+    const isCancelled = session.status === SESSION_STATUS.CANCELLED;
+    const seconds = isCancelled
+      ? 0
+      : session.status === SESSION_STATUS.COMPLETED
+        ? session.finalElapsedSeconds
+        : elapsedSeconds(session, clock());
     return {
       ...session,
       elapsedSeconds: seconds,
-      currentCost: session.status === SESSION_STATUS.COMPLETED
+      currentCost: isCancelled
+        ? 0
+        : session.status === SESSION_STATUS.COMPLETED
         ? session.finalCost
         : currentCost(session, seconds),
     };
@@ -141,8 +146,8 @@ export function createSessionService({
 
     async update({ businessId, sessionId, hourlyRate, startTime }) {
       const session = await requireSession(businessId, sessionId);
-      if (session.status === SESSION_STATUS.COMPLETED) {
-        throw new AppError(409, "Completed sessions cannot be edited", "INVALID_SESSION_TRANSITION");
+      if ([SESSION_STATUS.COMPLETED, SESSION_STATUS.CANCELLED].includes(session.status)) {
+        throw new AppError(409, "Completed or cancelled sessions cannot be edited", "INVALID_SESSION_TRANSITION");
       }
       const values = {};
       if (hourlyRate !== undefined) values.hourly_rate = hourlyRate;
@@ -182,6 +187,20 @@ export function createSessionService({
       });
       await stations.updateStatus(businessId, session.stationId, "available");
       return present(updated);
+    },
+
+    async cancel({ businessId, sessionId, userId }) {
+      const result = await sessions.cancel(businessId, sessionId, userId);
+      if (result.outcome === "not_found") {
+        throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      }
+      if (result.outcome === "forbidden") {
+        throw new AppError(403, "Session cancellation is not permitted", "FORBIDDEN");
+      }
+      if (result.outcome !== "cancelled" || !result.session) {
+        throw new AppError(409, "Only an active or paused session can be cancelled", "INVALID_SESSION_TRANSITION");
+      }
+      return present(result.session);
     },
 
     async remove({ businessId, sessionId, userId, role }) {
