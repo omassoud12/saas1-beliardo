@@ -6,7 +6,7 @@ import { PasswordSetup } from "./components/PasswordSetup";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
-  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
+  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions,
   resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
 import { Home } from "./pages/Home";
@@ -212,23 +212,6 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
   }, [selectedStationId, sessionActionPending, showNotice, stations, updateSelectedStation]);
 
-  const handlePause = useCallback(async () => {
-    const sessionId = sessionIds[selectedStationId];
-    if (!sessionId || sessionActionPending) {
-      showNotice("Live session record not found");
-      return;
-    }
-    setSessionActionPending(true);
-    try {
-      const session = await pauseSession(sessionId);
-      updateSelectedStation((station) => stationFromSession(station, session));
-    } catch (error) {
-      showNotice(error.message || "Unable to pause session");
-    } finally {
-      setSessionActionPending(false);
-    }
-  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
-
   const handleResume = useCallback(async () => {
     const sessionId = sessionIds[selectedStationId];
     if (!sessionId || sessionActionPending) {
@@ -349,7 +332,6 @@ function AuthenticatedApp({ onSignOut, access }) {
           onRateChange={handleRateChange}
           onStartTimeChange={handleStartTimeChange}
           onStart={handleStart}
-          onPause={handlePause}
           onResume={handleResume}
           onEnd={handleEnd}
           onCancel={handleCancel}

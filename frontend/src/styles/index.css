@@ -829,7 +829,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   animation: confirmation-in 150ms ease-out both;
 }
 
-.end-confirmation__heading,
 .end-confirmation__actions {
   display: flex;
   align-items: center;
@@ -837,13 +836,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   gap: 12px;
 }
 
-.end-confirmation__heading strong {
-  color: #edc4c0;
-  font-size: 0.9rem;
-}
-
-.end-confirmation__heading p,
-.end-adjusted-note,
 .end-time-error {
   margin: 4px 0 0;
   color: #bca19e;
@@ -873,10 +865,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   opacity: 0.55;
 }
 
-.end-confirmation__current {
-  white-space: nowrap;
-}
-
 .end-time-field {
   display: grid;
   gap: 7px;
@@ -902,45 +890,6 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
 .end-time-error {
   color: #f0a39d;
-}
-
-.end-preview {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px;
-  overflow: hidden;
-  margin: 0;
-  border: 1px solid rgba(230, 234, 222, 0.1);
-  border-radius: 8px;
-  background: rgba(230, 234, 222, 0.08);
-}
-
-.end-preview div {
-  display: grid;
-  gap: 4px;
-  padding: 10px 12px;
-  background: rgba(20, 25, 21, 0.86);
-}
-
-.end-preview dt {
-  color: var(--muted);
-  font-size: 0.66rem;
-}
-
-.end-preview dd {
-  margin: 0;
-  color: var(--text-soft);
-  font-size: 0.78rem;
-  font-weight: 650;
-}
-
-.end-preview__total {
-  grid-column: 1 / -1;
-}
-
-.end-preview__total dd {
-  color: var(--accent-bright);
-  font-size: 1rem;
 }
 
 .cancel-confirmation {
@@ -1338,23 +1287,13 @@ input[type="time"]::-webkit-calendar-picker-indicator {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
   }
 
-  .end-confirmation__heading,
   .end-confirmation__actions {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .end-confirmation__heading button,
   .end-confirmation__actions button {
     width: 100%;
-  }
-
-  .end-preview {
-    grid-template-columns: 1fr;
-  }
-
-  .end-preview__total {
-    grid-column: auto;
   }
 
   .session-actions__primary {

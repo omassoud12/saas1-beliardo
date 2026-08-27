@@ -79,6 +79,12 @@ export function formatDateTimeInput(timestamp, timeZone) {
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
 }
 
+export function formatZonedTimeInput(timestamp, timeZone) {
+  if (!timestamp) return "";
+  const parts = zonedParts(timestamp, timeZone);
+  return `${parts.hour}:${parts.minute}`;
+}
+
 export function zonedDateTimeToTimestamp(value, timeZone) {
   const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value);
   if (!match) return null;
@@ -94,6 +100,24 @@ export function zonedDateTimeToTimestamp(value, timeZone) {
     candidate += desiredUtc - representedUtc;
   }
   return formatDateTimeInput(candidate, timeZone) === value ? candidate : null;
+}
+
+export function zonedTimeToTimestamp(value, timeZone, referenceTimestamp = Date.now()) {
+  if (!/^\d{2}:\d{2}$/.test(value)) return null;
+  const parts = zonedParts(referenceTimestamp, timeZone);
+  const today = `${parts.year}-${parts.month}-${parts.day}`;
+  const todayCandidate = zonedDateTimeToTimestamp(`${today}T${value}`, timeZone);
+  if (todayCandidate !== null && todayCandidate <= referenceTimestamp + 60_000) return todayCandidate;
+
+  const previousDate = new Date(Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day) - 1,
+  ));
+  const previousDay = [
+    previousDate.getUTCFullYear(),
+    String(previousDate.getUTCMonth() + 1).padStart(2, "0"),
+    String(previousDate.getUTCDate()).padStart(2, "0"),
+  ].join("-");
+  return zonedDateTimeToTimestamp(`${previousDay}T${value}`, timeZone);
 }
 
 function clippedIntervalSeconds(start, end, sessionStart, selectedEnd) {

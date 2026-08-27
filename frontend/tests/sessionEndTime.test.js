@@ -2,14 +2,29 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   formatDateTimeInput,
+  formatZonedTimeInput,
   getAdjustedSessionPreview,
   zonedDateTimeToTimestamp,
+  zonedTimeToTimestamp,
 } from "../src/utils/session.js";
 
 test("lounge-local date time round-trips without using the browser timezone", () => {
   const timestamp = zonedDateTimeToTimestamp("2026-08-27T14:30", "Asia/Beirut");
   assert.equal(new Date(timestamp).toISOString(), "2026-08-27T11:30:00.000Z");
   assert.equal(formatDateTimeInput(timestamp, "Asia/Beirut"), "2026-08-27T14:30");
+});
+
+test("time-only end input uses the lounge day and supports crossing midnight", () => {
+  const now = Date.parse("2026-08-27T22:30:00.000Z"); // 01:30 on Aug 28 in Beirut
+  assert.equal(formatZonedTimeInput(now, "Asia/Beirut"), "01:30");
+  assert.equal(
+    new Date(zonedTimeToTimestamp("00:45", "Asia/Beirut", now)).toISOString(),
+    "2026-08-27T21:45:00.000Z",
+  );
+  assert.equal(
+    new Date(zonedTimeToTimestamp("23:45", "Asia/Beirut", now)).toISOString(),
+    "2026-08-27T20:45:00.000Z",
+  );
 });
 
 test("nonexistent daylight-saving local times are rejected", () => {
