@@ -1,19 +1,35 @@
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-export function useClock(intervalMs = 250) {
-  const [now, setNow] = useState(() => Date.now());
+const TICK_MS = 1000;
+const listeners = new Set();
+let now = Date.now();
+let timeoutId;
 
-  useEffect(() => {
-    let timeoutId;
+function scheduleTick() {
+  timeoutId = window.setTimeout(() => {
+    now = Date.now();
+    for (const listener of listeners) listener();
+    if (listeners.size > 0) scheduleTick();
+  }, TICK_MS - (Date.now() % TICK_MS));
+}
 
-    const tick = () => {
-      setNow(Date.now());
-      timeoutId = window.setTimeout(tick, intervalMs - (Date.now() % intervalMs));
-    };
+function subscribe(listener) {
+  listeners.add(listener);
+  if (listeners.size === 1) {
+    now = Date.now();
+    scheduleTick();
+  }
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0) {
+      window.clearTimeout(timeoutId);
+      timeoutId = undefined;
+    }
+  };
+}
 
-    timeoutId = window.setTimeout(tick, intervalMs - (Date.now() % intervalMs));
-    return () => window.clearTimeout(timeoutId);
-  }, [intervalMs]);
+const getSnapshot = () => now;
 
-  return now;
+export function useClock() {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 }

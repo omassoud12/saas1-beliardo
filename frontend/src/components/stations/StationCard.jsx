@@ -1,5 +1,7 @@
+import { memo } from "react";
 import { StatusBadge } from "../StatusBadge";
 import { STATION_TYPES, getStationName } from "../../data/stationTypes";
+import { useClock } from "../../hooks/useClock";
 import { formatDuration, formatMoney, getCurrentCost, getElapsedSeconds } from "../../utils/session";
 
 function BilliardMotif() {
@@ -35,7 +37,17 @@ function PlayStationMotif() {
   );
 }
 
-export function StationCard({ station, now, selected, onSelect }) {
+export const StationCard = memo(function StationCard(props) {
+  if (props.station.status === "available") return <StationCardView {...props} now={Date.now()} />;
+  return <LiveStationCard {...props} />;
+});
+
+function LiveStationCard(props) {
+  const now = useClock();
+  return <StationCardView {...props} now={now} />;
+}
+
+function StationCardView({ station, now, selected, onSelect }) {
   const type = STATION_TYPES[station.type];
   const isAvailable = station.status === "available";
   const elapsed = getElapsedSeconds(station, now);

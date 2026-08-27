@@ -1,17 +1,47 @@
 import { supabase } from "./supabase";
+import { createAuthenticatedRequestKey, createInFlightRequestCache } from "./inFlightRequests";
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
+const getRequests = createInFlightRequestCache();
+let sessionRequest;
+
+async function getAuthenticatedSession() {
+  if (!sessionRequest) {
+    sessionRequest = supabase.auth.getSession().finally(() => { sessionRequest = null; });
+  }
+  const { data, error } = await sessionRequest;
+  if (error || !data.session?.access_token) throw new Error("Authentication is required");
+  return data.session;
+}
+
+function requestTenantId(headers) {
+  if (headers instanceof Headers) return headers.get("X-Business-Id") ?? "";
+  const entry = Object.entries(headers ?? {}).find(([name]) => name.toLowerCase() === "x-business-id");
+  return entry?.[1] ?? "";
+}
 
 export async function apiRequest(path, options = {}) {
   if (!supabase) throw new Error("Supabase frontend environment variables are required");
-  const { data, error } = await supabase.auth.getSession();
-  if (error || !data.session?.access_token) throw new Error("Authentication is required");
+  const session = await getAuthenticatedSession();
+  const method = (options.method ?? "GET").toUpperCase();
+  if (method === "GET" && !options.signal) {
+    const key = createAuthenticatedRequestKey({
+      accessToken: session.access_token,
+      userId: session.user.id,
+      tenantId: requestTenantId(options.headers),
+      path,
+    });
+    return getRequests.run(key, () => performApiRequest(path, options, session));
+  }
+  return performApiRequest(path, options, session);
+}
 
+async function performApiRequest(path, options, session) {
   const { headers, ...fetchOptions } = options;
   const response = await fetch(`${apiBaseUrl}${path}`, {
     ...fetchOptions,
     headers: {
-      Authorization: `Bearer ${data.session.access_token}`,
+      Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
       ...headers,
     },

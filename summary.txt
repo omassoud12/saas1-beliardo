@@ -1,0 +1,107 @@
+BELIARDO PROJECT SUMMARY
+Last reviewed: 2026-08-27
+
+PURPOSE AND REAL-WORLD OPERATION
+Beliardo is a multi-tenant lounge operations SPA for billiard, ping-pong, and PlayStation venues. An approved owner configures stations, invites employees, runs live sessions, and reviews daily/monthly/yearly performance. Employees receive restricted Home access to operate sessions. Platform administrators approve and manage tenant accounts. Session timestamps are stored in UTC; tenant timezone rules assign reporting dates. A business day runs from 06:00 local time through the instant before 06:00 the next calendar day.
+
+ARCHITECTURE AND STACK
+- Frontend: React 18 SPA, Vite 5, Recharts, browser Fetch API, Supabase JS client. Source is under frontend/src; production output is frontend/dist.
+- Backend: Node.js ES modules, Express 4, controller -> service -> repository layering under backend/src/features.
+- Data/auth: Supabase Auth plus PostgreSQL. The backend uses a server-only service-role client; browser authentication uses the public Supabase client.
+- Database: businesses, business_members, profiles, platform_admins, stations, sessions, employee_invitations, and admin_audit_logs. Migrations are in backend/supabase/migrations. RLS protects direct authenticated access; backend repositories use explicit tenant filters while operating with service-role privileges.
+- API: JSON REST under /api. Main groups are /health, /access, /platform, /employees, /stations, /sessions, /dashboard, and /business.
+- Testing: Node's built-in test runner with repository fakes/unit tests. There is no live Supabase integration suite, browser E2E suite, or CI configuration.
+
+AUTHENTICATION, ACCESS, AND ROLES
+- Supabase provides sign-up, email confirmation, password sign-in, password reset, invitation/recovery links, sessions, and token verification.
+- Every protected backend request uses Supabase getClaims() to cryptographically verify the bearer token. Asymmetric tokens verify locally with cached JWKS; symmetric tokens safely fall back inside Supabase Auth to getUser(). Only the verified subject establishes identity. One service-role-only SQL function then loads the database profile/email, platform-admin flag, tenant membership, tenant status, role, and timezone; JWT/client claims never grant application roles.
+- platform_admin: platform-wide user/owner approval, suspension, reactivation, removal, and audit APIs.
+- owner: full access only when profile, tenant, and membership are approved/active; can configure stations, manage employees, operate sessions, and view analytics.
+- employee: active-tenant Home/session access; cannot manage stations, employees, or analytics. New invitees must finish password setup before Home access.
+- Additional states block access: pending_email, pending_approval, rejected, suspended, deleted, disabled membership, inactive tenant, and password_setup_required.
+- If multiple memberships exist, the API supports X-Business-Id, but the current UI has no tenant switcher and otherwise uses the first eligible membership.
+
+MAIN WORKFLOWS
+1. Owner onboarding: sign up -> confirm email -> database creates pending owner/profile/tenant -> platform admin approves -> owner configures stations.
+2. Employee onboarding: owner creates invitation -> only a SHA-256 token hash is stored -> Supabase sends invite or recovery email -> authenticated recipient accepts via atomic SQL RPC -> employee membership/profile activate -> password setup completes -> Home opens.
+3. Station management: owner edits the station list; frontend caches per tenant in localStorage and syncs the authoritative list through the backend.
+4. Session lifecycle: create draft -> start -> optional pause/resume/update -> end. Elapsed duration excludes paused time; final cost is derived from duration and hourly rate; the station becomes available after completion.
+5. Reporting: completed sessions feed dashboard and business analytics. Daily history includes completed sessions ending in the selected business day and active/paused sessions overlapping it. Monthly/yearly totals and charts group by the tenant business date.
+6. Business-day rollover: backend returns the authoritative business date and next 06:00 UTC instant. An open Home page refreshes at that boundary; active sessions remain open, while the Finished counter resets for the new day.
+
+BUSINESS-DAY AND REVENUE RULES
+- BUSINESS_DAY_START_HOUR in backend/src/shared/utils/timeRange.js is the single application cutoff constant.
+- Tenant-local times before 06:00 receive the previous calendar date; 06:00 starts the new date.
+- Query windows are half-open [local 06:00, next local 06:00), converted to UTC. This handles DST days with 23 or 25 elapsed hours.
+- Date-only API filters normalize to those tenant-local boundaries. Explicit timestamp filters remain exact UTC instants.
+- The cutoff value is passed to the database analytics RPC; reusable SQL business_date() performs database grouping without a separate hardcoded cutoff.
+- Existing revenue recognition is preserved: a completed session's full final duration and cost belong to the business day in which it ends. Sessions are not split or automatically ended at 06:00. Concurrency charts clip overlap only for visualization.
+
+FEATURE STATUS
+Completed:
+- Supabase authentication, owner registration, confirmation/reset flows, persistent access-state resolution, and employee password setup.
+- Platform account/tenant approval and status management APIs/UI.
+- Tenant-scoped station configuration with local fallback.
+- Employee invitation, resend, revoke, atomic acceptance, legacy-account repair, and audit records.
+- Session draft/start/pause/resume/edit/end/delete lifecycle, paused-time accounting, final cost, active-session restoration, and Finished-today count.
+- Owner daily/monthly/yearly summaries, revenue/activity breakdowns, session ledger, calendar, concurrency and revenue charts, and dashboard APIs.
+- Tenant-timezone 06:00 business-day ranges, grouping, date filters, automatic Home rollover, and DST-aware hourly windows.
+- Home performance controls: one shared 1-second live clock isolated to active cards/panels, concurrent GET coalescing, parallel initial station/session reads, configuration-only station synchronization, and lazy admin/modal routes.
+- The authorized Home shell and Hall operations heading render as soon as access is confirmed. Station cards use a local, dimension-reserving skeleton only when no tenant-keyed cache is available; header counters remain placeholders until their source request resolves instead of briefly showing incorrect zeroes.
+- Responsive UI, explicit favicon, operational error responses, and unit coverage.
+
+Backend-only or incomplete:
+- Platform audit-log and some user-update APIs exist, but the current platform UI does not expose the full audit log or profile-edit workflow.
+- /api/dashboard and /api/sessions/completed exist, while the main frontend primarily uses /api/business summaries and the daily ledger rather than dedicated screens for every endpoint.
+- No PDF/CSV/data export implementation exists.
+- No scheduled end-of-day aggregation exists; reports are computed on demand. No active session is auto-ended.
+- No realtime/WebSocket subscription or multi-client conflict resolution; synchronization occurs through REST and the scheduled 06:00 refresh.
+- Currency is currently fixed to USD in business summaries rather than stored per tenant.
+- No pagination UI; several repository/API reads use fixed limits.
+- No runtime feature is intentionally mocked. Unit tests use in-memory repository fakes.
+
+KNOWN ISSUES, TECHNICAL DEBT, AND SECURITY RISKS
+- Migration dependency: deployed Supabase schema must include every migration through 20260827_010. Migration 010 must be applied before the updated backend because authentication now calls its service-role-only access-context function.
+- The frontend environment example currently contains project-specific public Supabase configuration instead of neutral placeholders. Replace it with placeholders and review/rotate exposed project credentials according to Supabase policy. Never place the service-role credential in frontend code.
+- Internal database error messages are exposed whenever NODE_ENV is not exactly production. Production deployment must set NODE_ENV=production.
+- No API rate limiting, brute-force protection, request correlation, structured logging, or centralized monitoring is implemented. Supabase provides some auth-provider controls, but application endpoints remain unthrottled.
+- Invitation tokens travel in a URL query parameter until acceptance, creating potential browser-history, referrer, proxy-log, and screenshot exposure. Tokens are random, expire, and are stored hashed, but URL handling should still be hardened.
+- The service-role client bypasses RLS, so every repository and access guard must retain explicit tenant scoping. A guard/repository regression could have high impact.
+- Session update plus station-status update, station list upsert plus deletion, and several platform status transitions are multi-step operations rather than database transactions; partial failure can leave inconsistent state. Invitation acceptance is atomic.
+- Station localStorage fallback treats an empty remote station list as potentially unavailable and can repopulate it on the next owner sync. Empty authoritative lists and offline failures should be distinguished.
+- Tests do not execute migrations or repositories against PostgreSQL/Supabase, so SQL syntax, permissions, RLS, and deployment drift require manual verification.
+- Frontend bundle size remains substantial because Supabase is required during authentication and analytics charts are dependency-heavy. Analytics, admin pages, session controls, and station forms are lazy-loaded; the optimized initial chunk is 395.75 kB (112.95 kB gzip).
+
+LIGHTHOUSE PERFORMANCE INVESTIGATION
+- Confirmed render path: Supabase session resolution and secure /api/access/me authorization must complete before protected UI is mounted. The Hall operations h1 has no opacity, visibility, transition, or entrance animation, and no remote/@font-face resource blocks it. It uses the system fallback stack.
+- Baseline contributors after the required security gate were eager parsing of Dashboard, Employees, Platform Admin, session controls, and station forms; serialized /api/stations then /api/sessions/active startup; repeated development-mode GETs; three separate database context reads in authentication; and a 250 ms clock update at the application root.
+- Initial production API counts remain one /api/access/me, one /api/stations, and one /api/sessions/active request. The station and session requests now begin concurrently. Under React development StrictMode, overlapping duplicate GETs that could previously issue twice are coalesced to one in-flight request per authenticated token and path.
+- Baseline Lighthouse provided by production: Performance 78, FCP 1.42 s, Speed Index 1.59 s, LCP 2.93 s, TBT 0 ms, CLS 0. No authenticated post-change Lighthouse run was possible in this workspace because Lighthouse is not installed and no reusable authenticated browser profile/test account was provided. Targets are therefore not claimed.
+- Latest supplied development-server network timings were /api/access/me about 916 ms, /api/stations about 1,505 ms, /api/sessions/active about 1,561 ms, and maximum critical-path latency 1,561 ms. Code tracing confirmed that every endpoint paid a remote auth.getUser() verification before the access-context RPC; getClaims() now removes that remote verification only when the deployed project uses asymmetric signing. Exact stage timings and post-change endpoint timings remain unmeasured because no authenticated test session or database EXPLAIN access was available.
+- Migration 010 matches the real filters: business_members(user_id, joined_at) excluding removed memberships and active/paused sessions by business_id/started_at. The existing station uniqueness index already supports business_id/type/number ordering, so no redundant station index was added. Roll back the application before dropping the access-context function; either performance index can be dropped independently if query plans show it is unused.
+
+CONFIGURATION AND DEPLOYMENT
+Backend variables: PORT, CORS_ORIGIN, FRONTEND_URL, SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, NODE_ENV.
+Frontend variables: VITE_API_URL, VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY.
+Required manual setup: apply migrations in filename order; configure Supabase Auth site/redirect URLs and email/SMTP; seed at least one platform_admin record securely; keep service-role credentials backend-only; set production CORS origins and NODE_ENV.
+
+CHANGE LOG
+Format for future entries: date | change | files | reason | behavior | migration/config/manual action | validation.
+
+2026-08-24 | Initial frontend/backend foundation | React/Vite frontend; Express/Supabase backend; tenant, station, and session schema | Establish lounge operations MVP | Added station UI, tenant-scoped session lifecycle, authentication foundation, and dashboard structure | Apply migration 001; configure backend/frontend Supabase variables | Initial project tests/build.
+2026-08-24 | Business analytics | business feature, analytics UI/tests, migration 002 | Add real operating reports | Added daily/monthly/yearly summaries and database aggregation RPC | Apply migration 002 | Analytics unit tests.
+2026-08-24 | Environment handling | backend environment/server configuration | Make configuration explicit and fail safely | Centralized required backend variables and dotenv startup | Populate environment files without committing secrets | Startup/config verification.
+2026-08-25 | SaaS access and platform management | profiles/platform/employees features, guards, UI, migration 004/005 | Support tenant approval and employee access | Added platform roles, status transitions, RLS policies, invitations, audit logging, and atomic acceptance | Apply migrations 004-005; configure Auth redirects/email | Access, authentication, employee, platform, and CORS tests.
+2026-08-25 | Daily revenue/activity charts | DailyRevenueBarChart, ActivityAreaChart, DailySummary | Visualize daily revenue and activity | Added initial daily chart integration | No database/config action | Frontend build/manual UI verification.
+2026-08-25 | Business analytics chart framework | analytics chart components/utilities/pages | Make charts reusable and accessible | Added shared chart panels, states, legends, tooltips, data tables, and refactored analytics views | No database/config action | Frontend chart tests/build.
+2026-08-25 | Concurrent activity line chart | ActivityLineChart and related analytics components | Represent simultaneous sessions more accurately | Replaced the area chart with an interval-based concurrency line chart | No database/config action | Concurrency/chart tests and build.
+2026-08-25 | Monthly revenue visualization | MonthlyRevenueChart, MonthlySummary, KpiGrid, AnalyticsChartPanel | Add daily revenue composition and monthly KPIs | Added stacked revenue bars, total line, future-day handling, summaries, and chart refactors | No database/config action | Frontend chart tests/build.
+2026-08-27 | Employee password setup and invitation repair | access/auth middleware, PasswordSetup UI/API, migrations 006-008 | Secure invite onboarding and repair legacy owner provisioning/ambiguous SQL | Persisted required setup state, restricted access until completion, removed stale owner artifacts, and fixed invitation RPC column ambiguity | Apply migrations 006-008; ensure Auth recovery redirect is allowed | Access/employee tests and production build.
+2026-08-27 | Finished session metric | session controller/service/repository, Home header/App/API, tests | Show completed work on Home | Counts sessions completed in the current business day and updates immediately after ending a session | No new environment variable | Backend/frontend tests and production build.
+2026-08-27 | 06:00 business-day system | timeRange utility, access/business/dashboard/session layers, analytics UI/utilities, migration 009, boundary tests | Replace midnight reporting with tenant-local 06:00 cutoff | UTC ranges, database buckets, filters, charts, history, Finished count, and automatic rollover now share the same rule; crossing sessions remain open and revenue is recognized on completion day | Apply migration 009 before updated backend; restart backend/frontend | 43 backend + 12 frontend tests passed; production build and diff check passed.
+2026-08-27 | Project technical summary | summary.txt | Create a durable architecture/status/risk/change record and maintenance contract | Added concise project documentation with secret-safe configuration names and append-only change format | No migration or environment change | Compared source, routes, migrations, tests, git history, and current worktree.
+2026-08-27 | Lighthouse/root-render and request-path optimization | frontend App, Header, Home, styles, session/station components, clock/persistence/API utilities and tests; backend authentication/test; migration 010; summary.txt | Remove 4 Hz whole-app renders, duplicate/serial initial requests, misleading loading values, redundant station writes, and repeated access queries reported by Lighthouse | The secure shell paints immediately after access; local station skeletons reserve space; live UI alone consumes one shared 1-second clock; identical concurrent GETs coalesce per authenticated token; station/session reads start together; only configuration changes sync; admin/modal code loads on demand; authentication uses one tenant-scoped RPC plus matching indexes | Apply migration 010 before deploying/restarting the backend; no new environment variable | Frontend 16/16 and backend 43/43 tests passed; production build and diff check passed; initial JS changed from 407.69 kB/115.52 kB gzip to 395.41 kB/112.83 kB gzip; no valid post-change authenticated Lighthouse score was recorded.
+2026-08-27 | Authentication and initial-query follow-up | backend authentication, station repository and authentication tests; frontend API/deduplication utility and tests; summary.txt | Remove avoidable remote JWT verification where asymmetric signing permits it, narrow station selects, and make request coalescing scopes explicit | Supabase getClaims cryptographically verifies identity and safely falls back for symmetric keys; all dynamic authorization still comes from the database RPC; station responses are unchanged; in-flight requests are isolated by user, tenant, token, and path | Deploy backend with @supabase/supabase-js 2.112.4 and migration 010; confirm asymmetric Auth signing and run authenticated production measurements | Frontend 17/17 and backend 47/47 tests passed; production build and preview startup passed; diff check passed; initial JS 395.75 kB/112.95 kB gzip; endpoint and Lighthouse after-metrics not claimed without authenticated measurement.
+
+MAINTENANCE RULE
+After every project change, update only the affected summary/status/risk section and append one compact CHANGE LOG entry containing: date, description, modified files, reason, resulting behavior, required migration/environment/manual action, and validation. Never record passwords, keys, tokens, credentials, or secret values.

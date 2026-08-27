@@ -1,4 +1,8 @@
 export function Header({ summary, view, onViewChange, onSignOut, permissions }) {
+  const summaryValue = (value) => value === null
+    ? <span className="hall-summary__loading" aria-label="Loading">&nbsp;</span>
+    : value;
+
   return (
     <header className="app-header">
       <div className="brand-block">
@@ -46,23 +50,23 @@ export function Header({ summary, view, onViewChange, onSignOut, permissions }) 
       <dl className="hall-summary" aria-label="Hall status">
         <div>
           <dt>Stations</dt>
-          <dd>{summary.total}</dd>
+          <dd>{summaryValue(summary.total)}</dd>
         </div>
         <div className="hall-summary__active">
           <dt>Active</dt>
-          <dd>{summary.active}</dd>
+          <dd>{summaryValue(summary.active)}</dd>
         </div>
         <div className="hall-summary__paused">
           <dt>Paused</dt>
-          <dd>{summary.paused}</dd>
+          <dd>{summaryValue(summary.paused)}</dd>
         </div>
         <div>
           <dt>Available</dt>
-          <dd>{summary.available}</dd>
+          <dd>{summaryValue(summary.available)}</dd>
         </div>
         <div className="hall-summary__finished">
           <dt>Finished</dt>
-          <dd>{summary.finished}</dd>
+          <dd>{summaryValue(summary.finished)}</dd>
         </div>
       </dl>
     </header>

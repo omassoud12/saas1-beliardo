@@ -1,7 +1,28 @@
+import { useMemo } from "react";
 import { STATION_TYPE_ORDER } from "../data/stationTypes";
 import { StationSection } from "../components/stations/StationSection";
 
-export function Home({ stations, now, selectedStationId, onSelect, onManageStations }) {
+export function Home({ stations, stationsHydrated, selectedStationId, onSelect, onManageStations }) {
+  const stationsByType = useMemo(() => Object.fromEntries(
+    STATION_TYPE_ORDER.map((type) => [type, stations.filter((station) => station.type === type)]),
+  ), [stations]);
+  if (!stationsHydrated && stations.length === 0) {
+    return (
+      <div className="live-floor" aria-busy="true" aria-label="Loading stations">
+        <div className="section-heading section-heading--floor">
+          <div>
+            <p className="eyebrow">Live floor</p>
+            <h2>Station overview</h2>
+          </div>
+          <p>Select any station to manage its session.</p>
+        </div>
+        <div className="station-loading-grid" aria-hidden="true">
+          <div /><div /><div /><div />
+        </div>
+      </div>
+    );
+  }
+
   if (stations.length === 0) {
     return (
       <section className="empty-state empty-state--home">
@@ -25,14 +46,13 @@ export function Home({ stations, now, selectedStationId, onSelect, onManageStati
       </div>
 
       {STATION_TYPE_ORDER.map((type) => {
-        const typeStations = stations.filter((station) => station.type === type);
+        const typeStations = stationsByType[type];
         if (typeStations.length === 0) return null;
         return (
           <StationSection
             key={type}
             type={type}
             stations={typeStations}
-            now={now}
             selectedStationId={selectedStationId}
             onSelect={onSelect}
           />

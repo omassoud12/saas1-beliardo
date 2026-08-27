@@ -9,39 +9,30 @@ export function createAuthenticate({ getAdminClient = getSupabaseAdmin } = {}) {
       if (scheme !== "Bearer" || !token) throw new AppError(401, "A valid Supabase access token is required", "UNAUTHORIZED");
 
       const supabase = getAdminClient();
-      const { data: userData, error: userError } = await supabase.auth.getUser(token);
-      if (userError || !userData.user) throw new AppError(401, "Invalid or expired access token", "UNAUTHORIZED");
+      const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+      const userId = claimsData?.claims?.sub;
+      if (claimsError || typeof userId !== "string" || !userId) {
+        throw new AppError(401, "Invalid or expired access token", "UNAUTHORIZED");
+      }
 
-      const user = userData.user;
       const requestedBusinessId = request.headers["x-business-id"];
-      let membershipQuery = supabase
-        .from("business_members")
-        .select("business_id, role, status, businesses!inner(id, timezone, status)")
-        .eq("user_id", user.id)
-        .neq("status", "removed");
-      if (requestedBusinessId) membershipQuery = membershipQuery.eq("business_id", requestedBusinessId);
+      const { data: contexts, error: contextError } = await supabase.rpc("get_request_access_context", {
+        p_user_id: userId,
+        p_business_id: requestedBusinessId || null,
+      });
+      if (contextError) throw contextError;
+      const context = contexts?.[0];
+      if (!context?.profile) throw new AppError(403, "User profile is not provisioned", "PROFILE_REQUIRED");
 
-      const [profileResult, platformResult, membershipResult] = await Promise.all([
-        supabase.from("profiles").select("id, email, full_name, account_type, account_status, requires_password_setup").eq("id", user.id).maybeSingle(),
-        supabase.from("platform_admins").select("user_id").eq("user_id", user.id).maybeSingle(),
-        membershipQuery.order("joined_at", { ascending: true }).limit(1),
-      ]);
-      if (profileResult.error) throw profileResult.error;
-      if (platformResult.error) throw platformResult.error;
-      if (membershipResult.error) throw membershipResult.error;
-      if (!profileResult.data) throw new AppError(403, "User profile is not provisioned", "PROFILE_REQUIRED");
-
-      const membership = membershipResult.data?.[0] ?? null;
-      const business = Array.isArray(membership?.businesses) ? membership.businesses[0] : membership?.businesses;
       request.auth = {
-        user,
-        profile: profileResult.data,
-        isPlatformAdmin: Boolean(platformResult.data),
-        businessId: membership?.business_id ?? null,
-        role: membership?.role ?? null,
-        membershipStatus: membership?.status ?? null,
-        businessStatus: business?.status ?? null,
-        timezone: business?.timezone ?? "UTC",
+        user: { id: userId, email: context.profile.email },
+        profile: context.profile,
+        isPlatformAdmin: Boolean(context.is_platform_admin),
+        businessId: context.business_id ?? null,
+        role: context.role ?? null,
+        membershipStatus: context.membership_status ?? null,
+        businessStatus: context.business_status ?? null,
+        timezone: context.timezone ?? "UTC",
       };
       return next();
     } catch (error) {

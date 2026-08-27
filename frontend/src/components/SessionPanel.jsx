@@ -3,6 +3,7 @@ import { StatusBadge } from "./StatusBadge";
 import { SessionTimer } from "./SessionTimer";
 import { CloseIcon, PauseIcon, PlayIcon, StopIcon } from "./icons";
 import { STATION_TYPES } from "../data/stationTypes";
+import { useClock } from "../hooks/useClock";
 import {
   formatMoney,
   formatTimeInput,
@@ -12,7 +13,6 @@ import {
 
 export function SessionPanel({
   station,
-  now,
   onClose,
   onRateChange,
   onStartTimeChange,
@@ -22,6 +22,7 @@ export function SessionPanel({
   onEnd,
   busy = false,
 }) {
+  const now = useClock();
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
   const [confirmingEnd, setConfirmingEnd] = useState(false);

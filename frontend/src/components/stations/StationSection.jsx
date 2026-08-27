@@ -1,7 +1,7 @@
 import { STATION_TYPES } from "../../data/stationTypes";
 import { StationCard } from "./StationCard";
 
-export function StationSection({ type, stations, now, selectedStationId, onSelect }) {
+export function StationSection({ type, stations, selectedStationId, onSelect }) {
   const metadata = STATION_TYPES[type];
   const countLabel = stations.length === 1
     ? metadata.countLabel.replace(/s$/, "")
@@ -21,7 +21,6 @@ export function StationSection({ type, stations, now, selectedStationId, onSelec
           <StationCard
             key={station.id}
             station={station}
-            now={now}
             selected={station.id === selectedStationId}
             onSelect={onSelect}
           />

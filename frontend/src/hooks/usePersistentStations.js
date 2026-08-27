@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { STATION_TYPES, sortStations } from "../data/stationTypes";
 import { fetchStations, syncStations } from "../lib/api";
+import { stationConfigurationSignature } from "../lib/stationPersistence";
 
 const storageKeyFor = (businessId) => `billiard-hall.stations.v2.${businessId}`;
 
@@ -40,6 +41,7 @@ export function usePersistentStations({ businessId, canManage = true } = {}) {
   const storageKey = storageKeyFor(businessId);
   const [stations, setStations] = useState(() => loadStations(storageKey));
   const [isHydrated, setIsHydrated] = useState(false);
+  const lastSyncedConfigurationRef = useRef(null);
 
   useEffect(() => {
     try {
@@ -57,6 +59,7 @@ export function usePersistentStations({ businessId, canManage = true } = {}) {
         if (!isMounted) return;
 
         const normalizedRemoteStations = sortStations(remoteStations);
+        lastSyncedConfigurationRef.current = stationConfigurationSignature(normalizedRemoteStations);
         setStations((currentStations) => (
           normalizedRemoteStations.length === 0 && currentStations.length > 0
             ? currentStations
@@ -76,7 +79,12 @@ export function usePersistentStations({ businessId, canManage = true } = {}) {
   useEffect(() => {
     if (!isHydrated || !canManage) return;
 
+    const signature = stationConfigurationSignature(stations);
+    if (signature === lastSyncedConfigurationRef.current) return;
+    lastSyncedConfigurationRef.current = signature;
+
     syncStations(stations).catch(() => {
+      if (lastSyncedConfigurationRef.current === signature) lastSyncedConfigurationRef.current = null;
       // Local state remains usable if the backend is temporarily unavailable.
     });
   }, [canManage, isHydrated, stations]);

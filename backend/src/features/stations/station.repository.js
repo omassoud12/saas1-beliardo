@@ -1,6 +1,11 @@
 import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 
+const stationFields = `
+  id, business_id, type, number, hourly_rate, status,
+  session_start_at, paused_at, total_paused_ms, planned_start_at
+`;
+
 export function mapStation(row) {
   if (!row) return null;
   return {
@@ -21,7 +26,7 @@ export const stationRepository = {
   async findById(businessId, stationId) {
     const { data, error } = await getSupabaseAdmin()
       .from("stations")
-      .select("*")
+      .select(stationFields)
       .eq("business_id", businessId)
       .eq("id", stationId)
       .maybeSingle();
@@ -35,7 +40,7 @@ export const stationRepository = {
       .update({ status })
       .eq("business_id", businessId)
       .eq("id", stationId)
-      .select("*")
+      .select(stationFields)
       .single();
     throwDatabaseError(error);
     return mapStation(data);
@@ -44,7 +49,7 @@ export const stationRepository = {
   async list(businessId) {
     const { data, error } = await getSupabaseAdmin()
       .from("stations")
-      .select("*")
+      .select(stationFields)
       .eq("business_id", businessId)
       .order("type")
       .order("number");
@@ -88,7 +93,7 @@ export const stationRepository = {
     const { data, error } = await getSupabaseAdmin()
       .from("stations")
       .upsert(rows, { onConflict: "id" })
-      .select("*");
+      .select(stationFields);
     throwDatabaseError(error);
     return data.map(mapStation);
   },

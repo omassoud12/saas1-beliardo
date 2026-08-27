@@ -5,20 +5,19 @@ import { requireApprovedOwner } from "../src/middleware/accessGuards.js";
 
 function clientWithAccess({ memberships = [], profileStatus = "approved", platform = false } = {}) {
   return {
-    auth: { async getUser() { return { data: { user: { id: "user-1", email: "user@example.com" } }, error: null }; } },
-    from(table) {
-      const filters = {};
-      const builder = {
-        select() { return builder; }, eq(field, value) { filters[field] = value; return builder; },
-        neq() { return builder; }, order() { return builder; },
-        async maybeSingle() {
-          if (table === "profiles") return { data: { id: "user-1", email: "user@example.com", account_type: "owner", account_status: profileStatus }, error: null };
-          if (table === "platform_admins") return { data: platform ? { user_id: "user-1" } : null, error: null };
-          return { data: null, error: null };
-        },
-        async limit() { return { data: memberships.filter((item) => (!filters.user_id || item.user_id === filters.user_id) && (!filters.business_id || item.business_id === filters.business_id)).slice(0, 1), error: null }; },
-      };
-      return builder;
+    auth: { async getClaims() { return { data: { claims: { sub: "user-1", email: "untrusted-role@example.com", role: "platform_admin" } }, error: null }; } },
+    async rpc(_name, { p_business_id: businessId }) {
+      const membership = memberships.find((item) => !businessId || item.business_id === businessId);
+      const business = Array.isArray(membership?.businesses) ? membership.businesses[0] : membership?.businesses;
+      return { data: [{
+        profile: { id: "user-1", email: "user@example.com", account_type: "owner", account_status: profileStatus },
+        is_platform_admin: platform,
+        business_id: membership?.business_id ?? null,
+        role: membership?.role ?? null,
+        membership_status: membership?.status ?? null,
+        business_status: business?.status ?? null,
+        timezone: business?.timezone ?? null,
+      }], error: null };
     },
   };
 }
@@ -45,4 +44,46 @@ test("email alone never grants platform administrator access", async () => {
   const request = { headers: { authorization: "Bearer valid-token" } };
   await run(createAuthenticate({ getAdminClient: () => clientWithAccess({ platform: false }) }), request);
   assert.equal(request.auth.isPlatformAdmin, false);
+});
+
+test("verified JWT identity does not supply email, role, or tenant authorization", async () => {
+  const request = { headers: { authorization: "Bearer valid-token" } };
+  await run(createAuthenticate({ getAdminClient: () => clientWithAccess({ platform: false }) }), request);
+  assert.equal(request.auth.user.id, "user-1");
+  assert.equal(request.auth.user.email, "user@example.com");
+  assert.equal(request.auth.isPlatformAdmin, false);
+  assert.equal(request.auth.role, null);
+  assert.equal(request.auth.businessId, null);
+});
+
+test("invalid or expired JWTs return a consistent 401", async () => {
+  const client = clientWithAccess();
+  client.auth.getClaims = async () => ({ data: null, error: new Error("expired") });
+  const error = await run(createAuthenticate({ getAdminClient: () => client }), { headers: { authorization: "Bearer expired-token" } });
+  assert.equal(error.statusCode, 401);
+  assert.equal(error.code, "UNAUTHORIZED");
+});
+
+test("verified JWTs without a subject are rejected", async () => {
+  const client = clientWithAccess();
+  client.auth.getClaims = async () => ({ data: { claims: {} }, error: null });
+  const error = await run(createAuthenticate({ getAdminClient: () => client }), { headers: { authorization: "Bearer malformed-token" } });
+  assert.equal(error.statusCode, 401);
+  assert.equal(error.code, "UNAUTHORIZED");
+});
+
+test("missing and malformed bearer headers are rejected before verification", async () => {
+  const client = clientWithAccess();
+  let verificationCalls = 0;
+  client.auth.getClaims = async () => {
+    verificationCalls += 1;
+    return { data: { claims: { sub: "user-1" } }, error: null };
+  };
+  for (const authorization of [undefined, "Basic value", "Bearer"] ) {
+    const headers = authorization ? { authorization } : {};
+    const error = await run(createAuthenticate({ getAdminClient: () => client }), { headers });
+    assert.equal(error.statusCode, 401);
+    assert.equal(error.code, "UNAUTHORIZED");
+  }
+  assert.equal(verificationCalls, 0);
 });

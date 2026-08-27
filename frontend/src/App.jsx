@@ -3,21 +3,20 @@ import { Header } from "./components/Header";
 import { AuthGate } from "./components/AuthGate";
 import { AccountState } from "./components/AccountState";
 import { PasswordSetup } from "./components/PasswordSetup";
-import { SessionPanel } from "./components/SessionPanel";
-import { StationForm } from "./components/stations/StationForm";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
-import { useClock } from "./hooks/useClock";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
   createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
   resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
-import { Dashboard } from "./pages/Dashboard";
 import { Home } from "./pages/Home";
-import { Employees } from "./pages/Employees";
-import { PlatformAdmin } from "./pages/PlatformAdmin";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
 
+const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
+const Employees = lazy(() => import("./pages/Employees").then((module) => ({ default: module.Employees })));
+const PlatformAdmin = lazy(() => import("./pages/PlatformAdmin").then((module) => ({ default: module.PlatformAdmin })));
+const SessionPanel = lazy(() => import("./components/SessionPanel").then((module) => ({ default: module.SessionPanel })));
+const StationForm = lazy(() => import("./components/stations/StationForm").then((module) => ({ default: module.StationForm })));
 const BusinessAnalytics = lazy(() => import("./pages/business/BusinessAnalytics").then((module) => ({ default: module.BusinessAnalytics })));
 
 export default function App() {
@@ -67,7 +66,7 @@ function AccessRouter({ session, onSignOut }) {
   if (result.loading) return <div className="auth-loading" aria-label="Loading account access"><span /></div>;
   if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={async () => { await completePasswordSetup(); const access = await fetchMyAccess(); window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, access, needsPassword: false })); }} />;
   if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
-  if (result.access.state === "platform_admin") return <PlatformAdmin onSignOut={onSignOut} />;
+  if (result.access.state === "platform_admin") return <Suspense fallback={<div className="auth-loading" aria-label="Loading platform administration"><span /></div>}><PlatformAdmin onSignOut={onSignOut} /></Suspense>;
   if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;
   return <AuthenticatedApp onSignOut={onSignOut} access={result.access} />;
 }
@@ -79,23 +78,24 @@ function AuthenticatedApp({ onSignOut, access }) {
   const [stationForm, setStationForm] = useState(null);
   const [notice, setNotice] = useState(null);
   const [sessionIds, setSessionIds] = useState({});
-  const [finishedToday, setFinishedToday] = useState(0);
+  const [finishedToday, setFinishedToday] = useState(null);
   const [businessDate, setBusinessDate] = useState(access.tenant.businessDate);
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const noticeTimeoutRef = useRef(null);
-  const now = useClock();
+  const latestSessionsRef = useRef(null);
 
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
   const handleClosePanel = useCallback(() => setSelectedStationId(null), []);
   const handleCloseForm = useCallback(() => setStationForm(null), []);
+  const handleManageStations = useCallback(() => setView("dashboard"), []);
 
   const summary = useMemo(() => ({
-    total: stations.length,
-    active: stations.filter((station) => station.status === "active").length,
-    paused: stations.filter((station) => station.status === "paused").length,
-    available: stations.filter((station) => station.status === "available").length,
+    total: !stationsHydrated && stations.length === 0 ? null : stations.length,
+    active: !stationsHydrated && stations.length === 0 ? null : stations.filter((station) => station.status === "active").length,
+    paused: !stationsHydrated && stations.length === 0 ? null : stations.filter((station) => station.status === "paused").length,
+    available: !stationsHydrated && stations.length === 0 ? null : stations.filter((station) => station.status === "available").length,
     finished: finishedToday,
-  }), [finishedToday, stations]);
+  }), [finishedToday, stations, stationsHydrated]);
 
   const updateSelectedStation = useCallback((updater) => {
     setStations((currentStations) => sortStations(currentStations.map((station) => (
@@ -112,13 +112,13 @@ function AuthenticatedApp({ onSignOut, access }) {
   useEffect(() => () => window.clearTimeout(noticeTimeoutRef.current), []);
 
   useEffect(() => {
-    if (!stationsHydrated) return undefined;
     let cancelled = false;
     let boundaryTimer;
     async function syncSessions() {
       try {
         const status = await fetchActiveSessions();
         if (cancelled) return;
+        latestSessionsRef.current = status.sessions;
         const ids = {};
         for (const session of status.sessions) ids[session.stationId] = session.id;
         setSessionIds(ids);
@@ -144,6 +144,16 @@ function AuthenticatedApp({ onSignOut, access }) {
       cancelled = true;
       window.clearTimeout(boundaryTimer);
     };
+  }, [setStations]);
+
+  useEffect(() => {
+    if (!stationsHydrated || !latestSessionsRef.current) return;
+    const sessions = latestSessionsRef.current;
+    setStations((currentStations) => currentStations.map((station) => {
+      const session = sessions.find((item) => item.stationId === station.id);
+      if (session) return stationFromSession(station, session);
+      return ["active", "paused"].includes(station.status) ? resetStationSession(station) : station;
+    }));
   }, [setStations, stationsHydrated]);
 
   const handleSaveStation = useCallback((values) => {
@@ -268,6 +278,16 @@ function AuthenticatedApp({ onSignOut, access }) {
     setView(nextView);
   }, [access.permissions.manageEmployees, access.permissions.viewAnalytics]);
 
+  const handleRateChange = useCallback((value) => {
+    const rate = Math.min(999, Math.max(0, Number(value) || 0));
+    updateSelectedStation((station) => ({ ...station, hourlyRate: rate }));
+    const sessionId = sessionIds[selectedStationId];
+    if (sessionId) {
+      updateSession(sessionId, { hourlyRate: rate })
+        .catch(() => showNotice("Unable to update the live hourly rate"));
+    }
+  }, [selectedStationId, sessionIds, showNotice, updateSelectedStation]);
+
   return (
     <div className="app-shell">
       <div className="ambient ambient--one" aria-hidden="true" />
@@ -278,46 +298,37 @@ function AuthenticatedApp({ onSignOut, access }) {
         {view === "home" ? (
           <Home
             stations={stations}
-            now={now}
+            stationsHydrated={stationsHydrated}
             selectedStationId={selectedStationId}
             onSelect={setSelectedStationId}
-            onManageStations={access.permissions.manageStations ? () => setView("dashboard") : null}
+            onManageStations={access.permissions.manageStations ? handleManageStations : null}
           />
         ) : view === "dashboard" && access.permissions.manageStations ? (
-          <Dashboard
+          <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading dashboard"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Dashboard
             stations={stations}
             onAdd={() => setStationForm({ station: null })}
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
-          />
-        ) : view === "employees" && access.permissions.manageEmployees ? <Employees /> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} onBack={() => handleViewChange("dashboard")} /></Suspense>}
+          /></Suspense>
+        ) : view === "employees" && access.permissions.manageEmployees ? <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading employees"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Employees /></Suspense> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} onBack={() => handleViewChange("dashboard")} /></Suspense>}
       </main>
 
       {selectedStation && (
-        <SessionPanel
+        <Suspense fallback={null}><SessionPanel
           station={selectedStation}
-          now={now}
           onClose={handleClosePanel}
-          onRateChange={(value) => {
-            const rate = Math.min(999, Math.max(0, Number(value) || 0));
-            updateSelectedStation((station) => ({ ...station, hourlyRate: rate }));
-            const sessionId = sessionIds[selectedStationId];
-            if (sessionId) {
-              updateSession(sessionId, { hourlyRate: rate })
-                .catch(() => showNotice("Unable to update the live hourly rate"));
-            }
-          }}
+          onRateChange={handleRateChange}
           onStartTimeChange={handleStartTimeChange}
           onStart={handleStart}
           onPause={handlePause}
           onResume={handleResume}
           onEnd={handleEnd}
           busy={sessionActionPending}
-        />
+        /></Suspense>
       )}
 
       {stationForm && access.permissions.manageStations && (
-        <StationForm station={stationForm.station} stations={stations} onClose={handleCloseForm} onSave={handleSaveStation} />
+        <Suspense fallback={null}><StationForm station={stationForm.station} stations={stations} onClose={handleCloseForm} onSave={handleSaveStation} /></Suspense>
       )}
 
       {notice && <div className="toast" role="status"><span aria-hidden="true">✓</span>{notice}</div>}
