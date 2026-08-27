@@ -5,10 +5,15 @@ import { CloseIcon, PauseIcon, PlayIcon, StopIcon } from "./icons";
 import { STATION_TYPES } from "../data/stationTypes";
 import { useClock } from "../hooks/useClock";
 import {
+  formatDateTimeInput,
+  formatDuration,
+  formatLoungeDateTime,
   formatMoney,
   formatTimeInput,
   getCurrentCost,
   getElapsedSeconds,
+  getAdjustedSessionPreview,
+  zonedDateTimeToTimestamp,
 } from "../utils/session";
 
 export function SessionPanel({
@@ -21,6 +26,7 @@ export function SessionPanel({
   onResume,
   onEnd,
   onCancel,
+  timezone = "UTC",
   busy = false,
 }) {
   const now = useClock();
@@ -28,12 +34,32 @@ export function SessionPanel({
   const closeButtonRef = useRef(null);
   const safeActionRef = useRef(null);
   const [confirmationMode, setConfirmationMode] = useState(null);
+  const [endTimeInput, setEndTimeInput] = useState("");
+  const [endTimeAdjusted, setEndTimeAdjusted] = useState(false);
   const confirmationModeRef = useRef(null);
   const isAvailable = station.status === "available";
   const elapsed = getElapsedSeconds(station, now);
   const cost = getCurrentCost(station, now);
   const effectiveStartAt = station.sessionStartAt ?? station.plannedStartAt ?? now;
   const stationType = STATION_TYPES[station.type];
+  const selectedEnd = endTimeAdjusted ? zonedDateTimeToTimestamp(endTimeInput, timezone) : now;
+  const adjustedEndPreview = selectedEnd ? getAdjustedSessionPreview(station, selectedEnd) : null;
+  const currentPauseSeconds = station.status === "paused" && station.pausedAt
+    ? Math.max(0, Math.floor((now - station.pausedAt) / 1000))
+    : 0;
+  const endPreview = endTimeAdjusted ? adjustedEndPreview : {
+    elapsedSeconds: elapsed,
+    pausedSeconds: Math.floor((station.totalPausedMs ?? 0) / 1000) + currentPauseSeconds,
+    cost: Math.round(cost * 100) / 100,
+    hasUntrackedPause: false,
+  };
+  const endTimeError = confirmationMode !== "end" ? null
+    : !selectedEnd ? "Enter a valid lounge date and time."
+      : selectedEnd < station.sessionStartAt ? "End time cannot be before the session start."
+        : selectedEnd > now + 1_000 ? "End time cannot be in the future."
+          : endTimeAdjusted && endPreview?.hasUntrackedPause
+            ? "This older session has no detailed pause history, so its end time cannot be adjusted."
+            : null;
 
   const startLabel = useMemo(() => {
     return new Intl.DateTimeFormat("en-US", {
@@ -87,6 +113,22 @@ export function SessionPanel({
     confirmationModeRef.current = confirmationMode;
     if (confirmationMode) safeActionRef.current?.focus();
   }, [confirmationMode]);
+
+  const openEndConfirmation = () => {
+    setEndTimeInput(formatDateTimeInput(now, timezone));
+    setEndTimeAdjusted(false);
+    setConfirmationMode("end");
+  };
+
+  const useCurrentTime = () => {
+    setEndTimeInput(formatDateTimeInput(Date.now(), timezone));
+    setEndTimeAdjusted(false);
+  };
+
+  const confirmEnd = () => {
+    if (endTimeError || !selectedEnd) return;
+    onEnd(endTimeAdjusted ? new Date(selectedEnd).toISOString() : undefined);
+  };
 
   return (
     <div className="session-overlay" role="presentation" onMouseDown={(event) => {
@@ -191,13 +233,43 @@ export function SessionPanel({
                 )}
 
                 {confirmationMode === "end" ? (
-                  <div className="end-confirmation" role="group" aria-label="Confirm end session">
-                    <span>End at {formatMoney(cost)}?</span>
-                    <button ref={safeActionRef} type="button" onClick={() => setConfirmationMode(null)} disabled={busy}>Keep open</button>
-                    <button type="button" onClick={onEnd} disabled={busy}>End now</button>
+                  <div className="end-confirmation" role="alertdialog" aria-labelledby="end-session-title">
+                    <div className="end-confirmation__heading">
+                      <div>
+                        <strong id="end-session-title">End session</strong>
+                        <p>Choose the billable end time in the lounge timezone.</p>
+                      </div>
+                      <button className="end-confirmation__current" type="button" onClick={useCurrentTime} disabled={busy}>Use current time</button>
+                    </div>
+                    <label className="end-time-field">
+                      <span>End date and time · {timezone}</span>
+                      <input
+                        type="datetime-local"
+                        value={endTimeInput}
+                        max={formatDateTimeInput(now, timezone)}
+                        onChange={(event) => { setEndTimeInput(event.target.value); setEndTimeAdjusted(true); }}
+                        disabled={busy}
+                        aria-invalid={Boolean(endTimeError)}
+                        aria-describedby={endTimeError ? "end-time-error" : undefined}
+                      />
+                    </label>
+                    {endTimeError ? <p className="end-time-error" id="end-time-error">{endTimeError}</p> : endPreview ? (
+                      <dl className="end-preview">
+                        <div><dt>Start</dt><dd>{formatLoungeDateTime(station.sessionStartAt, timezone)}</dd></div>
+                        <div><dt>End</dt><dd>{formatLoungeDateTime(selectedEnd, timezone)}</dd></div>
+                        <div><dt>Paused</dt><dd>{formatDuration(endPreview.pausedSeconds)}</dd></div>
+                        <div><dt>Billable</dt><dd>{formatDuration(endPreview.elapsedSeconds)}</dd></div>
+                        <div className="end-preview__total"><dt>Final cost</dt><dd>{formatMoney(endPreview.cost)}</dd></div>
+                      </dl>
+                    ) : null}
+                    {endTimeAdjusted && !endTimeError && <p className="end-adjusted-note">Adjusted end time · the server will verify the final total.</p>}
+                    <div className="end-confirmation__actions">
+                      <button ref={safeActionRef} type="button" onClick={() => setConfirmationMode(null)} disabled={busy}>Keep session</button>
+                      <button type="button" onClick={confirmEnd} disabled={busy || Boolean(endTimeError)}>{busy ? "Ending…" : "Confirm end"}</button>
+                    </div>
                   </div>
                 ) : (
-                  <button className="button button--danger" type="button" onClick={() => setConfirmationMode("end")} disabled={busy || confirmationMode === "cancel"}>
+                  <button className="button button--danger" type="button" onClick={openEndConfirmation} disabled={busy || confirmationMode === "cancel"}>
                     <StopIcon />
                     End session
                   </button>

@@ -1,8 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSessionService } from "../src/features/sessions/session.service.js";
+import { validateEndSession } from "../src/features/sessions/session.validation.js";
 
-function createHarness({ cancelFailure = null } = {}) {
+function createHarness({ cancelFailure = null, endFailure = null } = {}) {
   let now = new Date("2026-08-24T10:00:00.000Z");
   const station = { id: "station-1", status: "available", hourlyRate: 12 };
   const records = new Map();
@@ -12,6 +13,7 @@ function createHarness({ cancelFailure = null } = {}) {
     total_paused_seconds: "totalPausedSeconds", final_elapsed_seconds: "finalElapsedSeconds",
     final_cost: "finalCost", hourly_rate: "hourlyRate",
     cancelled_at: "cancelledAt", cancelled_by: "cancelledBy",
+    ended_recorded_at: "endedRecordedAt", ended_by: "endedBy", pause_intervals: "pauseIntervals",
   };
   const sessions = {
     async create(values) {
@@ -20,6 +22,7 @@ function createHarness({ cancelFailure = null } = {}) {
         createdBy: values.createdBy, status: "draft", hourlyRate: values.hourlyRate,
         startedAt: null, pausedAt: null, endedAt: null, totalPausedSeconds: 0,
         finalElapsedSeconds: null, finalCost: null, cancelledAt: null, cancelledBy: null,
+        endedRecordedAt: null, endedBy: null, pauseIntervals: [], updatedAt: now.toISOString(),
       };
       records.set(record.id, record);
       return { ...record };
@@ -45,7 +48,23 @@ function createHarness({ cancelFailure = null } = {}) {
     async update(_businessId, id, values) {
       const record = records.get(id);
       for (const [key, value] of Object.entries(values)) record[mapFields[key] ?? key] = value;
+      record.updatedAt = now.toISOString();
       return { ...record };
+    },
+    async complete(values) {
+      if (endFailure) throw endFailure;
+      const record = records.get(values.sessionId);
+      if (!record || record.businessId !== values.businessId) return { outcome: "not_found", session: null };
+      if (!["active", "paused"].includes(record.status)) return { outcome: "invalid_state", session: { ...record } };
+      if (record.updatedAt !== values.expectedUpdatedAt) return { outcome: "conflict", session: { ...record } };
+      Object.assign(record, {
+        status: "completed", endedAt: values.endedAt, endedRecordedAt: now.toISOString(),
+        endedBy: values.endedBy, pausedAt: null, totalPausedSeconds: values.totalPausedSeconds,
+        finalElapsedSeconds: values.finalElapsedSeconds, finalCost: values.finalCost,
+        pauseIntervals: values.pauseIntervals, updatedAt: now.toISOString(),
+      });
+      station.status = "available";
+      return { outcome: "completed", session: { ...record } };
     },
     async cancel(businessId, id, cancelledBy) {
       if (cancelFailure) throw cancelFailure;
@@ -91,7 +110,7 @@ test("session lifecycle excludes paused time and calculates final cost", async (
   assert.equal(resumed.totalPausedSeconds, 600);
 
   harness.setTime("2026-08-24T11:00:00.000Z");
-  const ended = await harness.service.end({ businessId: "business-1", sessionId: created.id });
+  const ended = await harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1" });
   assert.equal(ended.status, "completed");
   assert.equal(ended.finalElapsedSeconds, 3000);
   assert.equal(ended.finalCost, 10);
@@ -108,9 +127,9 @@ test("invalid lifecycle transitions are rejected", async () => {
     (error) => error.statusCode === 409 && error.code === "INVALID_SESSION_TRANSITION",
   );
   await service.start({ businessId: "business-1", sessionId: created.id });
-  await service.end({ businessId: "business-1", sessionId: created.id });
+  await service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1" });
   await assert.rejects(
-    service.end({ businessId: "business-1", sessionId: created.id }),
+    service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1" }),
     (error) => error.statusCode === 409 && error.code === "INVALID_SESSION_TRANSITION",
   );
 });
@@ -179,7 +198,7 @@ test("completed and already-cancelled sessions reject cancellation safely", asyn
   const completedHarness = createHarness();
   const completed = await completedHarness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });
   await completedHarness.service.start({ businessId: "business-1", sessionId: completed.id });
-  await completedHarness.service.end({ businessId: "business-1", sessionId: completed.id });
+  await completedHarness.service.end({ businessId: "business-1", sessionId: completed.id, userId: "user-1" });
   await assert.rejects(
     completedHarness.service.cancel({ businessId: "business-1", sessionId: completed.id, userId: "user-1" }),
     (error) => error.statusCode === 409 && error.code === "INVALID_SESSION_TRANSITION",
@@ -232,4 +251,97 @@ test("cancellation across the 06:00 boundary never contributes to either day", a
   await harness.service.cancel({ businessId: "business-1", sessionId: created.id, userId: "user-1" });
   assert.equal(await harness.service.getFinishedToday({ businessId: "business-1", timezone: "Asia/Beirut", at: new Date("2026-08-27T02:59:00.000Z") }), 0);
   assert.equal(await harness.service.getFinishedToday({ businessId: "business-1", timezone: "Asia/Beirut", at: new Date("2026-08-27T03:01:00.000Z") }), 0);
+});
+
+test("adjusted end ignores pauses after the selection and clips a pause containing it", async () => {
+  const harness = createHarness();
+  const created = await harness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T10:20:00.000Z");
+  await harness.service.pause({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T10:40:00.000Z");
+  await harness.service.resume({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T10:50:00.000Z");
+  await harness.service.pause({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T11:00:00.000Z");
+
+  const ended = await harness.service.end({
+    businessId: "business-1", sessionId: created.id, userId: "employee-1",
+    endedAt: "2026-08-24T10:30:00.000Z",
+  });
+  assert.equal(ended.endedAt, "2026-08-24T10:30:00.000Z");
+  assert.equal(ended.totalPausedSeconds, 600);
+  assert.equal(ended.finalElapsedSeconds, 1200);
+  assert.equal(ended.finalCost, 4);
+  assert.equal(ended.endedBy, "employee-1");
+  assert.equal(ended.endedRecordedAt, "2026-08-24T11:00:00.000Z");
+  assert.equal(harness.station.status, "available");
+});
+
+test("adjusted end after a completed pause preserves rounding and billing", async () => {
+  const harness = createHarness();
+  const created = await harness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T10:20:00.900Z");
+  await harness.service.pause({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T10:30:00.100Z");
+  await harness.service.resume({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T11:00:00.000Z");
+  const ended = await harness.service.end({
+    businessId: "business-1", sessionId: created.id, userId: "user-1",
+    endedAt: "2026-08-24T10:45:00.900Z",
+  });
+  assert.equal(ended.totalPausedSeconds, 599);
+  assert.equal(ended.finalElapsedSeconds, 2101);
+  assert.equal(ended.finalCost, 7);
+});
+
+test("adjusted end rejects invalid boundaries and legacy untracked pauses", async () => {
+  const harness = createHarness();
+  const created = await harness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+  harness.setTime("2026-08-24T11:00:00.000Z");
+
+  await assert.rejects(
+    harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1", endedAt: "2026-08-24T09:59:59.000Z" }),
+    (error) => error.statusCode === 400 && error.code === "INVALID_END_TIME",
+  );
+  await assert.rejects(
+    harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1", endedAt: "2026-08-24T11:00:01.000Z" }),
+    (error) => error.statusCode === 400 && error.code === "INVALID_END_TIME",
+  );
+  await assert.rejects(
+    harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1", endedAt: "not-a-date" }),
+    (error) => error.statusCode === 400 && error.code === "INVALID_END_TIME",
+  );
+
+  harness.records.get(created.id).totalPausedSeconds = 300;
+  await assert.rejects(
+    harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1", endedAt: "2026-08-24T10:30:00.000Z" }),
+    (error) => error.statusCode === 409 && error.code === "ADJUSTED_END_UNAVAILABLE",
+  );
+  assert.equal(harness.station.status, "active");
+});
+
+test("failed atomic completion leaves the live session and station unchanged", async () => {
+  const harness = createHarness({ endFailure: new Error("database unavailable") });
+  const created = await harness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+  await assert.rejects(
+    harness.service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1" }),
+    /database unavailable/,
+  );
+  assert.equal(harness.records.get(created.id).status, "active");
+  assert.equal(harness.station.status, "active");
+});
+
+test("end request validation accepts an optional ISO timestamp and rejects date-only input", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(validateEndSession({ params: { id }, body: {} }), {
+    success: true, data: { sessionId: id, endedAt: undefined },
+  });
+  assert.equal(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27" } }).success, false);
+  assert.deepEqual(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27T11:30:00+03:00" } }), {
+    success: true, data: { sessionId: id, endedAt: "2026-08-27T08:30:00.000Z" },
+  });
 });

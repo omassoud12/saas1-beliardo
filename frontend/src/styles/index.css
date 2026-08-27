@@ -819,37 +819,128 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 }
 
 .end-confirmation {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  min-height: 48px;
-  padding: 6px 7px 6px 14px;
+  display: grid;
+  width: 100%;
+  gap: 14px;
+  padding: 18px;
   border: 1px solid rgba(220, 116, 109, 0.26);
   border-radius: var(--radius-sm);
   background: rgba(72, 37, 34, 0.5);
   animation: confirmation-in 150ms ease-out both;
 }
 
-.end-confirmation span {
-  color: #d9b3b0;
-  font-size: 0.74rem;
+.end-confirmation__heading,
+.end-confirmation__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.end-confirmation__heading strong {
+  color: #edc4c0;
+  font-size: 0.9rem;
+}
+
+.end-confirmation__heading p,
+.end-adjusted-note,
+.end-time-error {
+  margin: 4px 0 0;
+  color: #bca19e;
+  font-size: 0.72rem;
 }
 
 .end-confirmation button {
-  min-height: 34px;
-  padding: 0 10px;
-  border: 0;
+  min-height: 40px;
+  padding: 0 14px;
+  border: 1px solid rgba(230, 234, 222, 0.16);
   border-radius: 6px;
   background: transparent;
   color: var(--text-soft);
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   font-weight: 650;
   cursor: pointer;
 }
 
-.end-confirmation button:last-child {
+.end-confirmation__actions button:last-child {
   background: var(--danger);
+  border-color: var(--danger);
   color: #23100f;
+}
+
+.end-confirmation button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.end-confirmation__current {
+  white-space: nowrap;
+}
+
+.end-time-field {
+  display: grid;
+  gap: 7px;
+  color: #d9b3b0;
+  font-size: 0.72rem;
+}
+
+.end-time-field input {
+  min-height: 48px;
+  width: 100%;
+  padding: 0 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--text);
+  color-scheme: dark;
+  font: inherit;
+}
+
+.end-time-field input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.end-time-error {
+  color: #f0a39d;
+}
+
+.end-preview {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1px;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid rgba(230, 234, 222, 0.1);
+  border-radius: 8px;
+  background: rgba(230, 234, 222, 0.08);
+}
+
+.end-preview div {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  background: rgba(20, 25, 21, 0.86);
+}
+
+.end-preview dt {
+  color: var(--muted);
+  font-size: 0.66rem;
+}
+
+.end-preview dd {
+  margin: 0;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  font-weight: 650;
+}
+
+.end-preview__total {
+  grid-column: 1 / -1;
+}
+
+.end-preview__total dd {
+  color: var(--accent-bright);
+  font-size: 1rem;
 }
 
 .cancel-confirmation {
@@ -1244,10 +1335,26 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
   .end-confirmation {
     position: static;
-    flex: 1;
-    flex-wrap: wrap;
-    justify-content: flex-end;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .end-confirmation__heading,
+  .end-confirmation__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .end-confirmation__heading button,
+  .end-confirmation__actions button {
+    width: 100%;
+  }
+
+  .end-preview {
+    grid-template-columns: 1fr;
+  }
+
+  .end-preview__total {
+    grid-column: auto;
   }
 
   .session-actions__primary {

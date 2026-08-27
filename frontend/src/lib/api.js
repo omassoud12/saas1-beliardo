@@ -4,6 +4,7 @@ import { createAuthenticatedRequestKey, createInFlightRequestCache } from "./inF
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
 const getRequests = createInFlightRequestCache();
 const cancelRequests = createInFlightRequestCache();
+const endRequests = createInFlightRequestCache();
 let sessionRequest;
 
 async function getAuthenticatedSession() {
@@ -107,9 +108,14 @@ export async function updateSession(sessionId, values) {
   return payload.data.session;
 }
 
-export async function endSession(sessionId) {
-  const payload = await apiRequest(`/sessions/${sessionId}/end`, { method: "POST", body: "{}" });
-  return payload.data.session;
+export function endSession(sessionId, endedAt) {
+  return endRequests.run(sessionId, async () => {
+    const payload = await apiRequest(`/sessions/${sessionId}/end`, {
+      method: "POST",
+      body: JSON.stringify(endedAt ? { endedAt } : {}),
+    });
+    return payload.data.session;
+  });
 }
 
 export function cancelSession(sessionId) {

@@ -61,7 +61,17 @@ export const startSession = action("start", "Session started");
 export const pauseSession = action("pause", "Session paused");
 export const resumeSession = action("resume", "Session resumed");
 export const updateSession = action("update", "Session updated");
-export const endSession = action("end", "Session ended");
+
+export async function endSession(request, response, next) {
+  try {
+    const session = await sessionService.end({
+      businessId: request.auth.businessId,
+      userId: request.auth.user.id,
+      ...request.validated,
+    });
+    return sendSuccess(response, { data: { session }, message: "Session ended" });
+  } catch (error) { return next(error); }
+}
 
 export async function cancelSession(request, response, next) {
   try {

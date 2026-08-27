@@ -246,7 +246,7 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
   }, [selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
 
-  const handleEnd = useCallback(async () => {
+  const handleEnd = useCallback(async (endedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
     const sessionId = sessionIds[selectedStationId];
     if (!currentStation || !sessionId || sessionActionPending) {
@@ -255,7 +255,7 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
     setSessionActionPending(true);
     try {
-      const session = await endSession(sessionId);
+      const session = await endSession(sessionId, endedAt);
       updateSelectedStation(resetStationSession);
       setSessionIds((current) => {
         const next = { ...current };
@@ -353,6 +353,7 @@ function AuthenticatedApp({ onSignOut, access }) {
           onResume={handleResume}
           onEnd={handleEnd}
           onCancel={handleCancel}
+          timezone={access.tenant.timezone}
           busy={sessionActionPending}
         /></Suspense>
       )}
@@ -374,10 +375,11 @@ function stationFromSession(station, session) {
     sessionStartAt: session.startedAt ? new Date(session.startedAt).getTime() : null,
     pausedAt: session.pausedAt ? new Date(session.pausedAt).getTime() : null,
     totalPausedMs: Number(session.totalPausedSeconds || 0) * 1000,
+    pauseIntervals: session.pauseIntervals ?? [],
     plannedStartAt: null,
   };
 }
 
 function resetStationSession(station) {
-  return { ...station, status: "available", sessionStartAt: null, pausedAt: null, totalPausedMs: 0, plannedStartAt: null };
+  return { ...station, status: "available", sessionStartAt: null, pausedAt: null, totalPausedMs: 0, pauseIntervals: [], plannedStartAt: null };
 }

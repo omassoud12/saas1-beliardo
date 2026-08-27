@@ -19,6 +19,17 @@ function parseDate(value, field, { optional = true } = {}) {
   return { value: date.toISOString() };
 }
 
+function parseTimestamp(value, field) {
+  if (value === undefined || value === null || value === "") return { value: undefined };
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(value)) {
+    return { error: `${field} must be a valid ISO timestamp` };
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime())
+    ? { error: `${field} must be a valid ISO timestamp` }
+    : { value: date.toISOString() };
+}
+
 function parseRate(value, { optional = true } = {}) {
   if ((value === undefined || value === null || value === "") && optional) return { value: undefined };
   const rate = Number(value);
@@ -53,6 +64,16 @@ export function validateStartSession(request) {
   return errors.length
     ? failure(...errors)
     : success({ sessionId: request.params.id, startTime: startTime.value });
+}
+
+export function validateEndSession(request) {
+  const idResult = validateSessionId(request);
+  const endedAt = parseTimestamp(request.body?.endedAt, "endedAt");
+  const errors = [...(idResult.errors ?? [])];
+  if (endedAt.error) errors.push(endedAt.error);
+  return errors.length
+    ? failure(...errors)
+    : success({ sessionId: request.params.id, endedAt: endedAt.value });
 }
 
 export function validateUpdateSession(request) {

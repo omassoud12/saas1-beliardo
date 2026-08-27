@@ -7,7 +7,7 @@ import {
   getSession, pauseSession, resumeSession, startSession, updateSession,
 } from "./session.controller.js";
 import {
-  validateCompletedSessions, validateCreateSession, validateSessionId,
+  validateCompletedSessions, validateCreateSession, validateEndSession, validateSessionId,
   validateStartSession, validateUpdateSession,
 } from "./session.validation.js";
 
@@ -24,7 +24,7 @@ router.post("/:id/pause", validateRequest(validateSessionId), pauseSession);
 router.post("/:id/resume", validateRequest(validateSessionId), resumeSession);
 router.patch("/:id", validateRequest(validateUpdateSession), updateSession);
 router.post("/:id/cancel", validateRequest(validateSessionId), cancelSession);
-router.post("/:id/end", validateRequest(validateSessionId), endSession);
+router.post("/:id/end", validateRequest(validateEndSession), endSession);
 router.delete("/:id", validateRequest(validateSessionId), deleteSession);
 
 export default router;

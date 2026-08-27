@@ -19,6 +19,32 @@ function currentCost(session, seconds) {
   return Math.round(((seconds / 3600) * session.hourlyRate) * 100) / 100;
 }
 
+function intervalSeconds(interval, sessionStartMs, selectedEndMs) {
+  const startMs = Math.max(sessionStartMs, new Date(interval.startedAt).getTime());
+  const endMs = Math.min(selectedEndMs, new Date(interval.endedAt).getTime());
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return 0;
+  return Math.max(0, Math.floor((endMs - startMs) / 1000));
+}
+
+function completedPauseSeconds(session, selectedEndMs) {
+  const startMs = new Date(session.startedAt).getTime();
+  return (session.pauseIntervals ?? []).reduce(
+    (total, interval) => total + intervalSeconds(interval, startMs, selectedEndMs),
+    0,
+  );
+}
+
+function adjustedPauseSeconds(session, selectedEndMs) {
+  let seconds = completedPauseSeconds(session, selectedEndMs);
+  if (session.status === SESSION_STATUS.PAUSED && session.pausedAt) {
+    seconds += intervalSeconds({
+      startedAt: session.pausedAt,
+      endedAt: new Date(selectedEndMs).toISOString(),
+    }, new Date(session.startedAt).getTime(), selectedEndMs);
+  }
+  return seconds;
+}
+
 export function createSessionService({
   sessions = sessionRepository,
   stations = stationRepository,
@@ -108,6 +134,7 @@ export function createSessionService({
         started_at: startedAt.toISOString(),
         paused_at: null,
         total_paused_seconds: 0,
+        pause_intervals: [],
       });
       await stations.updateStatus(businessId, session.stationId, "active");
       return present(updated);
@@ -139,6 +166,10 @@ export function createSessionService({
         status: SESSION_STATUS.ACTIVE,
         paused_at: null,
         total_paused_seconds: session.totalPausedSeconds + pausedDuration,
+        pause_intervals: [
+          ...(session.pauseIntervals ?? []),
+          { startedAt: session.pausedAt, endedAt: now.toISOString() },
+        ],
       });
       await stations.updateStatus(businessId, session.stationId, "active");
       return present(updated);
@@ -161,32 +192,67 @@ export function createSessionService({
       return present(await sessions.update(businessId, sessionId, values));
     },
 
-    async end({ businessId, sessionId }) {
+    async end({ businessId, sessionId, userId, endedAt }) {
       const session = await requireSession(businessId, sessionId);
       if (![SESSION_STATUS.ACTIVE, SESSION_STATUS.PAUSED].includes(session.status)) {
         throw new AppError(409, "Only an active or paused session can be ended", "INVALID_SESSION_TRANSITION");
       }
       const now = clock();
-      let totalPausedSeconds = session.totalPausedSeconds;
-      if (session.status === SESSION_STATUS.PAUSED) {
-        totalPausedSeconds += Math.max(0, Math.floor(
-          (now.getTime() - new Date(session.pausedAt).getTime()) / 1000,
-        ));
+      const selectedEnd = endedAt === undefined ? now : new Date(endedAt);
+      const selectedEndMs = selectedEnd.getTime();
+      const startMs = new Date(session.startedAt).getTime();
+      if (!Number.isFinite(selectedEndMs)) {
+        throw new AppError(400, "endedAt must be a valid ISO date", "INVALID_END_TIME");
       }
-      const seconds = Math.max(0, Math.floor(
-        (now.getTime() - new Date(session.startedAt).getTime()) / 1000 - totalPausedSeconds,
-      ));
+      if (selectedEndMs < startMs) {
+        throw new AppError(400, "endedAt cannot be before the session start", "INVALID_END_TIME");
+      }
+      if (selectedEndMs > now.getTime()) {
+        throw new AppError(400, "endedAt cannot be in the future", "INVALID_END_TIME");
+      }
+
+      const trackedCompletedSeconds = completedPauseSeconds(session, Number.POSITIVE_INFINITY);
+      const legacyPausedSeconds = Math.max(0, session.totalPausedSeconds - trackedCompletedSeconds);
+      if (endedAt !== undefined && legacyPausedSeconds > 0) {
+        throw new AppError(
+          409,
+          "Adjusted end time is unavailable for this older session because its pause history was not recorded",
+          "ADJUSTED_END_UNAVAILABLE",
+        );
+      }
+
+      let totalPausedSeconds;
+      if (endedAt !== undefined) {
+        totalPausedSeconds = adjustedPauseSeconds(session, selectedEndMs);
+      } else {
+        totalPausedSeconds = session.totalPausedSeconds;
+        if (session.status === SESSION_STATUS.PAUSED) {
+          totalPausedSeconds += Math.max(0, Math.floor((now.getTime() - new Date(session.pausedAt).getTime()) / 1000));
+        }
+      }
+      const seconds = Math.max(0, Math.floor((selectedEndMs - startMs) / 1000) - totalPausedSeconds);
       const cost = currentCost(session, seconds);
-      const updated = await sessions.update(businessId, sessionId, {
-        status: SESSION_STATUS.COMPLETED,
-        ended_at: now.toISOString(),
-        paused_at: null,
-        total_paused_seconds: totalPausedSeconds,
-        final_elapsed_seconds: seconds,
-        final_cost: cost,
+      const pauseIntervals = session.status === SESSION_STATUS.PAUSED
+        ? [...(session.pauseIntervals ?? []), { startedAt: session.pausedAt, endedAt: now.toISOString() }]
+        : (session.pauseIntervals ?? []);
+      const result = await sessions.complete({
+        businessId,
+        sessionId,
+        endedBy: userId,
+        endedAt: selectedEnd.toISOString(),
+        expectedUpdatedAt: session.updatedAt,
+        totalPausedSeconds,
+        finalElapsedSeconds: seconds,
+        finalCost: cost,
+        pauseIntervals,
       });
-      await stations.updateStatus(businessId, session.stationId, "available");
-      return present(updated);
+      if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (result.outcome === "forbidden") throw new AppError(403, "Session completion is not permitted", "FORBIDDEN");
+      if (result.outcome === "conflict") throw new AppError(409, "Session changed while it was being ended", "SESSION_CONFLICT");
+      if (result.outcome !== "completed" || !result.session) {
+        throw new AppError(409, "Only an active or paused session can be ended", "INVALID_SESSION_TRANSITION");
+      }
+      return present(result.session);
     },
 
     async cancel({ businessId, sessionId, userId }) {

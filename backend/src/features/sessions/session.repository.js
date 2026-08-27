@@ -15,6 +15,9 @@ export function mapSession(row) {
     endedAt: row.ended_at,
     cancelledAt: row.cancelled_at ?? null,
     cancelledBy: row.cancelled_by ?? null,
+    endedRecordedAt: row.ended_recorded_at ?? null,
+    endedBy: row.ended_by ?? null,
+    pauseIntervals: Array.isArray(row.pause_intervals) ? row.pause_intervals : [],
     totalPausedSeconds: Number(row.total_paused_seconds) || 0,
     finalElapsedSeconds: row.final_elapsed_seconds === null ? null : Number(row.final_elapsed_seconds),
     finalCost: row.final_cost === null ? null : Number(row.final_cost),
@@ -27,7 +30,8 @@ export function mapSession(row) {
 
 const selectFields = `
   id, business_id, station_id, status, hourly_rate, started_at, paused_at,
-  ended_at, cancelled_at, cancelled_by, total_paused_seconds, final_elapsed_seconds, final_cost,
+  ended_at, ended_recorded_at, ended_by, cancelled_at, cancelled_by, pause_intervals,
+  total_paused_seconds, final_elapsed_seconds, final_cost,
   created_by, created_at, updated_at,
   station:stations(id, type, number, hourly_rate, status)
 `;
@@ -130,6 +134,26 @@ export const sessionRepository = {
       p_business_id: businessId,
       p_session_id: sessionId,
       p_cancelled_by: cancelledBy,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "not_found", session_record: null };
+    return {
+      outcome: result.outcome,
+      session: mapSession(result.session_record),
+    };
+  },
+
+  async complete(values) {
+    const { data, error } = await getSupabaseAdmin().rpc("end_session", {
+      p_business_id: values.businessId,
+      p_session_id: values.sessionId,
+      p_ended_by: values.endedBy,
+      p_ended_at: values.endedAt,
+      p_expected_updated_at: values.expectedUpdatedAt,
+      p_total_paused_seconds: values.totalPausedSeconds,
+      p_final_elapsed_seconds: values.finalElapsedSeconds,
+      p_final_cost: values.finalCost,
+      p_pause_intervals: values.pauseIntervals,
     });
     throwDatabaseError(error);
     const result = data?.[0] ?? { outcome: "not_found", session_record: null };
