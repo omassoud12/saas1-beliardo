@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createBusinessService } from "../src/features/business/business.service.js";
+import { aggregateSessionRows, isAnalyticsRpcMissing } from "../src/features/business/business.repository.js";
 
 const row = (bucket, type, sessions, seconds, revenue) => ({
   bucket_key: bucket,
@@ -23,6 +24,24 @@ function assertReconciles(summary, buckets) {
   }), { sessions: 0, seconds: 0, revenue: 0 });
   assert.deepEqual(activityTotals, bucketTotals);
 }
+
+test("missing analytics RPC is detected for the direct-query fallback", () => {
+  assert.equal(isAnalyticsRpcMissing({ code: "PGRST202", message: "Could not find get_business_analytics" }), true);
+  assert.equal(isAnalyticsRpcMissing({ code: "PGRST202", message: "Could not find another_function" }), false);
+});
+
+test("analytics fallback applies the 06:00 business date and aggregates activities", () => {
+  const rows = [
+    { ended_at: "2026-08-27T02:30:00.000Z", final_elapsed_seconds: 1800, final_cost: 5, station: { type: "billiard" } },
+    { ended_at: "2026-08-27T03:30:00.000Z", final_elapsed_seconds: 3600, final_cost: 10, station: { type: "billiard" } },
+    { ended_at: "2026-08-27T03:45:00.000Z", final_elapsed_seconds: 900, final_cost: 4, station: [{ type: "playstation" }] },
+  ];
+  assert.deepEqual(aggregateSessionRows(rows, "day", "Asia/Beirut"), [
+    row("2026-08-26", "billiard", 1, 1800, 5),
+    row("2026-08-27", "billiard", 1, 3600, 10),
+    row("2026-08-27", "playstation", 1, 900, 4),
+  ]);
+});
 
 test("daily analytics reconcile activities and expose open session count", async () => {
   const repository = {

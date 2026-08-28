@@ -15,6 +15,7 @@ test("CORS preflight allows every HTTP method used by the API", () => {
 
   assert.equal(statusCode, 204);
   assert.equal(headers["Access-Control-Allow-Origin"], "http://localhost:5173");
+  assert.equal(headers["Access-Control-Expose-Headers"], "Content-Disposition");
   for (const method of ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]) {
     assert.match(headers["Access-Control-Allow-Methods"], new RegExp(`\\b${method}\\b`));
   }

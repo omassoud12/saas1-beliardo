@@ -3,6 +3,7 @@ import { BusinessNavbar } from "../../components/business/BusinessNavbar";
 import { DailySummary } from "./DailySummary";
 import { MonthlySummary } from "./MonthlySummary";
 import { YearlySummary } from "./YearlySummary";
+import { BusinessReportExport } from "../../components/business/BusinessReportExport";
 
 export function BusinessAnalytics({ businessDate, onBack }) {
   const initialDate = businessDate;
@@ -24,7 +25,17 @@ export function BusinessAnalytics({ businessDate, onBack }) {
 
   return (
     <section className="business-analytics">
-      <BusinessNavbar section={section} onBack={onBack} onSectionChange={setSection} />
+      <BusinessNavbar
+        section={section}
+        onBack={onBack}
+        onSectionChange={setSection}
+        action={<BusinessReportExport
+          reportType={section}
+          date={selectedDate}
+          year={selectedYear}
+          month={selectedMonth}
+        />}
+      />
       {section === "daily" && <DailySummary date={selectedDate} businessDate={businessDate} onDateChange={selectDate} />}
       {section === "monthly" && (
         <MonthlySummary

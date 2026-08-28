@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { supabase } from "../lib/supabase";
+import { getAuthErrorMessage } from "../utils/authErrors";
 
 export function AuthGate({ children }) {
   const { session, loading } = useAuthSession();
@@ -19,7 +20,7 @@ export function AuthGate({ children }) {
     event.preventDefault();
     setStatus({ pending: true, error: "", message: "" });
     try {
-      const credentials = { email: form.email.trim(), password: form.password };
+      const credentials = { email: form.email.trim().toLowerCase(), password: form.password };
       const result = mode === "signin"
         ? await supabase.auth.signInWithPassword(credentials)
         : await supabase.auth.signUp({
@@ -27,12 +28,12 @@ export function AuthGate({ children }) {
           options: { data: hasInvitation ? { registration_type: "employee" } : { registration_type: "owner", business_name: form.businessName.trim() || "My Lounge" } },
         });
       if (result.error) {
-        setStatus({ pending: false, error: result.error.message, message: "" });
+        setStatus({ pending: false, error: getAuthErrorMessage(result.error, mode), message: "" });
       } else if (mode === "signup" && !result.data.session) {
         setStatus({ pending: false, error: "", message: "Check your email to confirm the account, then sign in." });
       }
-    } catch {
-      setStatus({ pending: false, error: "Unable to reach the authentication service. Try again.", message: "" });
+    } catch (error) {
+      setStatus({ pending: false, error: getAuthErrorMessage(error, mode), message: "" });
     }
   };
 

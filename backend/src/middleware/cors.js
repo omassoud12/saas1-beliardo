@@ -11,6 +11,7 @@ export function cors(request, response, next) {
 
   response.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
   response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Business-Id");
+  response.setHeader("Access-Control-Expose-Headers", "Content-Disposition");
 
   if (request.method === "OPTIONS") return response.sendStatus(204);
   return next();

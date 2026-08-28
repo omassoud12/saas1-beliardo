@@ -38,6 +38,34 @@ export async function apiRequest(path, options = {}) {
   return performApiRequest(path, options, session);
 }
 
+export async function apiFileRequest(path, options = {}) {
+  if (!supabase) throw new Error("Supabase frontend environment variables are required");
+  const session = await getAuthenticatedSession();
+  const { headers, ...fetchOptions } = options;
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    ...fetchOptions,
+    headers: {
+      Authorization: `Bearer ${session.access_token}`,
+      "Content-Type": "application/json",
+      ...headers,
+    },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const message = payload.message ?? "File generation failed";
+    const error = new Error(payload.error?.hint ? `${message}: ${payload.error.hint}` : message);
+    error.code = payload.error?.code;
+    error.details = payload.error?.details;
+    error.hint = payload.error?.hint;
+    throw error;
+  }
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().startsWith("application/pdf")) {
+    throw new Error("The server returned an invalid PDF response");
+  }
+  return { blob: await response.blob(), contentDisposition: response.headers.get("content-disposition") ?? "" };
+}
+
 async function performApiRequest(path, options, session) {
   const { headers, ...fetchOptions } = options;
   const response = await fetch(`${apiBaseUrl}${path}`, {

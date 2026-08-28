@@ -2366,6 +2366,186 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   background: rgba(0, 0, 0, 0.14);
 }
 
+.business-nav__main {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.business-report-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px;
+  border: 1px solid rgba(143, 196, 160, 0.32) !important;
+  background: rgba(143, 196, 160, 0.08) !important;
+  color: var(--accent-bright);
+  font-size: 0.78rem;
+  font-weight: 720;
+  white-space: nowrap;
+}
+
+.business-report-trigger span {
+  display: grid;
+  min-width: 28px;
+  min-height: 22px;
+  place-items: center;
+  border-radius: 5px;
+  background: var(--accent-bright);
+  color: #142018;
+  font-size: 0.58rem;
+  letter-spacing: 0.04em;
+}
+
+.business-report-overlay {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  overflow-y: auto;
+  place-items: center;
+  padding: 24px;
+  background: rgba(6, 9, 7, 0.76);
+  backdrop-filter: blur(9px);
+}
+
+.business-report-dialog {
+  width: min(680px, 100%);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border: 1px solid var(--border-strong);
+  border-radius: 17px;
+  background: #171c18;
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.55);
+}
+
+.business-report-dialog > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 22px 24px;
+  border-bottom: 1px solid var(--border);
+}
+
+.business-report-dialog h2 {
+  margin: 2px 0 0;
+  font-size: 1.45rem;
+}
+
+.business-report-dialog > header > button {
+  width: 38px;
+  min-height: 38px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-soft);
+  font-size: 1.35rem;
+  cursor: pointer;
+}
+
+.business-report-dialog form {
+  display: grid;
+  gap: 20px;
+  padding: 24px;
+}
+
+.business-report-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.business-report-fields label,
+.business-report-dialog fieldset {
+  display: grid;
+  gap: 7px;
+}
+
+.business-report-fields label > span,
+.business-report-dialog legend {
+  color: var(--text-soft);
+  font-size: 0.76rem;
+  font-weight: 680;
+}
+
+.business-report-fields small {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.business-report-fields input,
+.business-report-fields select,
+.business-report-fields textarea {
+  width: 100%;
+  min-height: 46px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, 0.19);
+  color: var(--text);
+  font: inherit;
+  resize: vertical;
+}
+
+.business-report-fields input[readonly] {
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.business-report-field--wide {
+  grid-column: 1 / -1;
+}
+
+.business-report-dialog fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.business-report-dialog legend {
+  margin-bottom: 9px;
+}
+
+.business-report-toggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.business-report-toggles label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  color: var(--text-soft);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.business-report-toggles input {
+  accent-color: var(--accent-bright);
+}
+
+.business-report-message {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.76rem;
+}
+
+.business-report-message--error { color: #f0aaa4; background: rgba(220, 116, 109, 0.09); }
+.business-report-message--success { color: var(--accent-bright); background: rgba(143, 196, 160, 0.09); }
+
+.business-report-dialog footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
 .business-nav__tabs button {
   position: relative;
   min-width: 112px;
@@ -3017,6 +3197,8 @@ button.calendar-day:hover {
   .business-nav { top: 6px; align-items: stretch; flex-direction: column; gap: 7px; }
   .business-nav__back { align-self: flex-start; min-height: 36px !important; }
   .business-nav__tabs button { min-width: 0; padding: 0 8px; }
+  .business-nav__main { width: 100%; }
+  .business-nav__tabs { flex: 1; }
   .business-view { padding-top: 30px; }
   .business-page-header { align-items: flex-start; flex-direction: column; }
   .period-navigator { width: 100%; }
@@ -3032,6 +3214,14 @@ button.calendar-day:hover {
 }
 
 @media (max-width: 560px) {
+  .business-nav__main { align-items: stretch; flex-direction: column; }
+  .business-report-trigger { justify-content: center; }
+  .business-report-overlay { align-items: end; padding: 0; }
+  .business-report-dialog { width: 100%; max-height: 94vh; border-radius: 17px 17px 0 0; }
+  .business-report-fields,
+  .business-report-toggles { grid-template-columns: 1fr; }
+  .business-report-field--wide { grid-column: auto; }
+  .business-report-dialog footer .button { flex: 1; }
   .business-page-header h2 { font-size: 2.1rem; }
   .business-kpi-grid { grid-template-columns: 1fr; }
   .business-kpi { min-height: 128px; }
