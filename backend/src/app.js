@@ -10,11 +10,16 @@ import platformRoutes from "./features/platform/platform.routes.js";
 import { cors } from "./middleware/cors.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
+import { apiRateLimiter, securityHeaders } from "./middleware/security.js";
+import { getTrustProxyHops } from "./config/env.js";
 
 export function createApp() {
   const app = express();
+  app.set("trust proxy", getTrustProxyHops());
   app.disable("x-powered-by");
+  app.use(securityHeaders);
   app.use(cors);
+  app.use(apiRateLimiter);
   app.use(express.json({ limit: "256kb" }));
   app.use("/api/health", healthRoutes);
   app.use("/api/access", accessRoutes);

@@ -1,7 +1,7 @@
+import { parseCorsOrigins } from "../config/env.js";
+
 export function cors(request, response, next) {
-  const allowedOrigins = (process.env.CORS_ORIGIN ?? "http://localhost:5173")
-    .split(",")
-    .map((origin) => origin.trim());
+  const allowedOrigins = parseCorsOrigins(process.env.CORS_ORIGIN ?? "http://localhost:5173");
   const origin = request.headers.origin;
 
   if (origin && allowedOrigins.includes(origin)) {

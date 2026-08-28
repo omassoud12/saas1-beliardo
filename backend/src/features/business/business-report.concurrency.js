@@ -1,6 +1,6 @@
 import { AppError } from "../../shared/errors/AppError.js";
 
-export function createReportGenerationGate(limit = 2) {
+export function createReportGenerationGate(limit = 1) {
   let active = 0;
   return {
     async run(task) {

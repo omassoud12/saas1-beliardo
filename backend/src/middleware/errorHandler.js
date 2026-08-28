@@ -3,7 +3,7 @@ export function errorHandler(error, _request, response, _next) {
   const isOperational = statusCode < 500 || error.name === "AppError";
   const exposeInternalError = process.env.NODE_ENV !== "production";
 
-  if (!isOperational) console.error(error);
+  if (statusCode >= 500) console.error(error);
 
   response.status(statusCode).json({
     success: false,

@@ -49,7 +49,7 @@ export async function downloadSavedBusinessReport(request, response, next) {
     response.set({
       "Content-Type": "application/pdf",
       "Content-Disposition": `attachment; filename="${report.filename}"`,
-      "Cache-Control": "private, max-age=3600",
+      "Cache-Control": "no-store",
       "Content-Length": String(report.buffer.length),
     });
     return response.status(200).send(report.buffer);
