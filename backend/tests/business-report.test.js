@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createBusinessReportService } from "../src/features/business/business-report.service.js";
+import { createBusinessReportService, quotaMonthAt } from "../src/features/business/business-report.service.js";
+import { createReportGenerationGate } from "../src/features/business/business-report.concurrency.js";
 import { createPdfRenderer } from "../src/features/business/business-report.pdf.js";
 import { createReportDocument, escapeHtml } from "../src/features/business/business-report.template.js";
 
@@ -19,19 +20,106 @@ function summary() {
 
 test("report service uses only the authenticated tenant id and authoritative summary service", async () => {
   const calls = [];
+  const exportCalls = [];
   const service = createBusinessReportService({
     repository: { async findBusiness(businessId) { calls.push(["business", businessId]); return { id: businessId, name: "Tenant Lounge" }; } },
     summaries: { async monthly(values) { calls.push(["summary", values.businessId]); return summary(); } },
+    exports: {
+      async reserve(values) { exportCalls.push(["reserve", values.businessId, values.requestedBy]); return { outcome: "reserved", exportId: "report-1", used: 0, remaining: 5 }; },
+      async upload(path, buffer) { exportCalls.push(["upload", path, buffer.length]); },
+      async complete(values) { exportCalls.push(["complete", values.exportId]); },
+      async fail() { throw new Error("fail should not be called"); },
+      async remove() { throw new Error("remove should not be called"); },
+    },
     pdf: async ({ html }) => { assert.match(html, /Tenant Lounge/); return new TextEncoder().encode("%PDF-1.4"); },
     clock: () => new Date("2026-08-27T10:00:00.000Z"),
   });
   const result = await service.generate({
-    businessId: "tenant-a", timezone: "Asia/Beirut",
+    businessId: "tenant-a", userId: "owner-a", timezone: "Asia/Beirut",
     config: { reportType: "monthly", year: 2026, month: 8, title: "August", notes: "", language: "en", sections: { summary: true, charts: true, categoryBreakdown: true, detailsTable: true } },
   });
   assert.deepEqual(calls, [["business", "tenant-a"], ["summary", "tenant-a"]]);
+  assert.deepEqual(exportCalls, [
+    ["reserve", "tenant-a", "owner-a"],
+    ["upload", "tenant-a/2026-08/report-1.pdf", 8],
+    ["complete", "report-1"],
+  ]);
   assert.equal(result.filename, "business-report-monthly-2026-08.pdf");
   assert.equal(result.buffer.subarray(0, 4).toString(), "%PDF");
+  assert.deepEqual(result.quota, { limit: 6, used: 1, remaining: 5 });
+});
+
+test("report quota uses the business timezone calendar month", () => {
+  const instant = new Date("2026-08-31T21:30:00.000Z");
+  assert.equal(quotaMonthAt(instant, "Asia/Beirut"), "2026-09-01");
+  assert.equal(quotaMonthAt(instant, "UTC"), "2026-08-01");
+});
+
+test("quota exhaustion skips summary and PDF generation", async () => {
+  let generated = false;
+  const service = createBusinessReportService({
+    exports: { async reserve() { return { outcome: "quota_exceeded", used: 6, remaining: 0 }; } },
+    pdf: async () => { generated = true; },
+  });
+  await assert.rejects(
+    service.generate({ businessId: "tenant-a", userId: "owner-a", timezone: "UTC", config: { reportType: "yearly", year: 2026 } }),
+    (error) => error.code === "REPORT_QUOTA_EXCEEDED" && error.details.remaining === 0,
+  );
+  assert.equal(generated, false);
+});
+
+test("failed PDF generation releases its reservation without consuming quota", async () => {
+  const calls = [];
+  const service = createBusinessReportService({
+    repository: { async findBusiness() { return { id: "tenant-a", name: "Tenant Lounge" }; } },
+    summaries: { async monthly() { return summary(); } },
+    exports: {
+      async reserve() { return { outcome: "reserved", exportId: "report-2", used: 2, remaining: 3 }; },
+      async fail(values) { calls.push([values.exportId, values.failureCode]); },
+      async remove() {},
+    },
+    pdf: async () => { const error = new Error("render failed"); error.code = "RENDER_FAILED"; throw error; },
+  });
+  await assert.rejects(service.generate({
+    businessId: "tenant-a", userId: "owner-a", timezone: "UTC",
+    config: { reportType: "monthly", year: 2026, month: 8, title: "August", notes: "", sections: { summary: true, charts: true, categoryBreakdown: true, detailsTable: true }, language: "en" },
+  }), /render failed/);
+  assert.deepEqual(calls, [["report-2", "RENDER_FAILED"]]);
+});
+
+test("generation gate rejects excess concurrent Chromium work", async () => {
+  const gate = createReportGenerationGate(1);
+  let release;
+  const first = gate.run(() => new Promise((resolve) => { release = resolve; }));
+  await assert.rejects(gate.run(async () => {}), (error) => error.code === "REPORT_GENERATION_BUSY");
+  release();
+  await first;
+  await gate.run(async () => {});
+});
+
+test("saved reports can be listed and downloaded without consuming quota", async () => {
+  const service = createBusinessReportService({
+    exports: {
+      async getStatus() {
+        return { used: 2, reports: [{ id: "report-3", filename: "saved.pdf", storagePath: "private/report-3.pdf" }] };
+      },
+      async findCompleted(businessId, reportId) {
+        assert.deepEqual([businessId, reportId], ["tenant-a", "report-3"]);
+        return { filename: "saved.pdf", storagePath: "private/report-3.pdf" };
+      },
+      async download(path) {
+        assert.equal(path, "private/report-3.pdf");
+        return Buffer.from("%PDF");
+      },
+    },
+    clock: () => new Date("2026-08-27T10:00:00.000Z"),
+  });
+  const listing = await service.list({ businessId: "tenant-a", timezone: "UTC" });
+  assert.deepEqual(listing.quota, { limit: 6, used: 2, remaining: 4, month: "2026-08-01" });
+  assert.equal("storagePath" in listing.reports[0], false);
+  const downloaded = await service.download({ businessId: "tenant-a", reportId: "report-3" });
+  assert.equal(downloaded.filename, "saved.pdf");
+  assert.equal(downloaded.buffer.toString(), "%PDF");
 });
 
 test("report HTML escapes owner content and supports RTL documents", () => {

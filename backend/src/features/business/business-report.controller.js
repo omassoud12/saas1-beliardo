@@ -7,6 +7,7 @@ export async function generateBusinessReport(request, response, next) {
   try {
     const report = await businessReportService.generate({
       businessId: request.auth.businessId,
+      userId: request.auth.user.id,
       timezone: request.auth.timezone,
       config: request.validated,
       signal: controller.signal,
@@ -24,5 +25,35 @@ export async function generateBusinessReport(request, response, next) {
     return next(error);
   } finally {
     request.removeListener("aborted", handleAbort);
+  }
+}
+
+export async function listBusinessReports(request, response, next) {
+  try {
+    const data = await businessReportService.list({
+      businessId: request.auth.businessId,
+      timezone: request.auth.timezone,
+    });
+    return response.status(200).json({ success: true, data });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+export async function downloadSavedBusinessReport(request, response, next) {
+  try {
+    const report = await businessReportService.download({
+      businessId: request.auth.businessId,
+      reportId: request.validated.reportId,
+    });
+    response.set({
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `attachment; filename="${report.filename}"`,
+      "Cache-Control": "private, max-age=3600",
+      "Content-Length": String(report.buffer.length),
+    });
+    return response.status(200).send(report.buffer);
+  } catch (error) {
+    return next(error);
   }
 }

@@ -22,14 +22,28 @@ export async function getYearlySummary(year, signal) {
   return payload.data.summary;
 }
 
-function safeDownloadName(contentDisposition, config) {
+function safeDownloadName(contentDisposition, fallbackFilename) {
   const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
   const received = match?.[1]?.replace(/[^a-zA-Z0-9._-]/g, "");
   if (received?.toLowerCase().endsWith(".pdf")) return received;
-  const period = config.reportType === "daily" ? config.date
-    : config.reportType === "monthly" ? `${config.year}-${String(config.month).padStart(2, "0")}`
-      : config.year;
-  return `business-report-${config.reportType}-${period}.pdf`;
+  return fallbackFilename;
+}
+
+function triggerDownload(blob, contentDisposition, fallbackFilename) {
+  const filename = safeDownloadName(contentDisposition, fallbackFilename);
+  const url = URL.createObjectURL(blob);
+  try {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  } finally {
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  }
+  return filename;
 }
 
 export function downloadBusinessReport(config) {
@@ -42,19 +56,19 @@ export function downloadBusinessReport(config) {
     if (blob.type && !blob.type.toLowerCase().startsWith("application/pdf")) {
       throw new Error("The downloaded report is not a PDF");
     }
-    const filename = safeDownloadName(contentDisposition, config);
-    const url = URL.createObjectURL(blob);
-    try {
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = filename;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-    } finally {
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    }
-    return filename;
+    const period = config.reportType === "daily" ? config.date
+      : config.reportType === "monthly" ? `${config.year}-${String(config.month).padStart(2, "0")}`
+        : config.year;
+    return triggerDownload(blob, contentDisposition, `business-report-${config.reportType}-${period}.pdf`);
   });
+}
+
+export async function getBusinessReportExports(signal) {
+  const payload = await apiRequest("/business/reports", { signal });
+  return payload.data;
+}
+
+export async function downloadSavedBusinessReport(report) {
+  const { blob, contentDisposition } = await apiFileRequest(`/business/reports/${report.id}/pdf`);
+  return triggerDownload(blob, contentDisposition, report.filename);
 }

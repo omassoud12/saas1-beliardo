@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {
   validateDailySummary, validateMonthlySummary, validateYearlySummary,
 } from "../src/features/business/business.validation.js";
-import { validateBusinessReport } from "../src/features/business/business-report.validation.js";
+import { validateBusinessReport, validateBusinessReportId } from "../src/features/business/business-report.validation.js";
 
 test("business analytics period validation accepts valid ranges", () => {
   assert.equal(validateDailySummary({ query: { date: "2026-08-24" } }).success, true);
@@ -39,4 +39,9 @@ test("business PDF validation rejects invalid periods, oversized text, and empty
   assert.equal(result.success, false);
   assert.match(result.errors.join(" "), /valid YYYY-MM-DD/);
   assert.match(result.errors.join(" "), /At least one/);
+});
+
+test("saved business report ids require UUIDs", () => {
+  assert.equal(validateBusinessReportId({ params: { reportId: "4a9ea7f5-4d40-4c19-87e8-a9ce8a1d9df0" } }).success, true);
+  assert.equal(validateBusinessReportId({ params: { reportId: "../report.pdf" } }).success, false);
 });
