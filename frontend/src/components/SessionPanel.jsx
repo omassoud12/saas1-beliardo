@@ -18,9 +18,12 @@ export function SessionPanel({
   station,
   onClose,
   onRateChange,
+  onControllerCountChange,
   onStartTimeChange,
   onStart,
   onResume,
+  onBeginEnd,
+  onKeep,
   onEnd,
   onCancel,
   timezone = "UTC",
@@ -33,13 +36,25 @@ export function SessionPanel({
   const [confirmationMode, setConfirmationMode] = useState(null);
   const [endTimeInput, setEndTimeInput] = useState("");
   const [endTimeAdjusted, setEndTimeAdjusted] = useState(false);
+  const [pendingEndAt, setPendingEndAt] = useState(null);
+  const [controllerCount, setControllerCount] = useState(
+    station.type === "playstation" ? (Number(station.controllerCount) || 1) : 1,
+  );
   const confirmationModeRef = useRef(null);
   const isAvailable = station.status === "available";
-  const elapsed = getElapsedSeconds(station, now);
-  const cost = getCurrentCost(station, now);
+  const selectedEnd = endTimeAdjusted
+    ? zonedTimeToTimestamp(endTimeInput, timezone, now)
+    : (pendingEndAt ?? now);
+  const displayNow = confirmationMode === "end" ? (selectedEnd ?? pendingEndAt ?? now) : now;
+  const elapsed = getElapsedSeconds(station, displayNow);
+  const cost = getCurrentCost(station, displayNow);
   const effectiveStartAt = station.sessionStartAt ?? station.plannedStartAt ?? now;
   const stationType = STATION_TYPES[station.type];
-  const selectedEnd = endTimeAdjusted ? zonedTimeToTimestamp(endTimeInput, timezone, now) : now;
+  const isPlayStation = station.type === "playstation";
+  const normalizedControllerCount = controllerCount === ""
+    ? (Number(station.controllerCount) || 1)
+    : Math.min(99, Math.max(1, Number(controllerCount) || 1));
+  const effectiveHourlyRate = station.hourlyRate * (isPlayStation ? normalizedControllerCount : 1);
   const adjustedEndPreview = selectedEnd ? getAdjustedSessionPreview(station, selectedEnd) : null;
   const endTimeError = confirmationMode !== "end" ? null
     : !selectedEnd ? "Enter a valid lounge date and time."
@@ -95,22 +110,42 @@ export function SessionPanel({
 
   useEffect(() => {
     setConfirmationMode(null);
-  }, [station.id, station.status]);
+    setPendingEndAt(null);
+  }, [station.id]);
+
+  useEffect(() => {
+    setControllerCount(station.type === "playstation" ? (Number(station.controllerCount) || 1) : 1);
+  }, [station.controllerCount, station.id, station.status, station.type]);
 
   useEffect(() => {
     confirmationModeRef.current = confirmationMode;
     if (confirmationMode) safeActionRef.current?.focus();
   }, [confirmationMode]);
 
-  const openEndConfirmation = () => {
-    setEndTimeInput(formatZonedTimeInput(now, timezone));
+  const openEndConfirmation = async () => {
+    const stoppedAt = Date.now();
+    setPendingEndAt(stoppedAt);
+    setEndTimeInput(formatZonedTimeInput(stoppedAt, timezone));
     setEndTimeAdjusted(false);
     setConfirmationMode("end");
+    const stopped = await onBeginEnd(stoppedAt);
+    if (!stopped) {
+      setConfirmationMode(null);
+      setPendingEndAt(null);
+    }
+  };
+
+  const keepSession = async () => {
+    const resumed = await onKeep();
+    if (resumed) {
+      setConfirmationMode(null);
+      setPendingEndAt(null);
+    }
   };
 
   const confirmEnd = () => {
     if (endTimeError || !selectedEnd) return;
-    onEnd(endTimeAdjusted ? new Date(selectedEnd).toISOString() : undefined);
+    onEnd(new Date(selectedEnd).toISOString());
   };
 
   return (
@@ -156,13 +191,15 @@ export function SessionPanel({
           <div className="session-readout__cost">
             <span className="readout-label">Current cost</span>
             <strong>{formatMoney(cost)}</strong>
-            <small>at {formatMoney(station.hourlyRate)} / hour</small>
+            <small>{isPlayStation
+              ? `${normalizedControllerCount} controller${normalizedControllerCount === 1 ? "" : "s"} at ${formatMoney(station.hourlyRate)} = ${formatMoney(effectiveHourlyRate)} / hour`
+              : `at ${formatMoney(station.hourlyRate)} / hour`}</small>
           </div>
         </div>
 
         <div className="session-fields">
           <label className="field">
-            <span>Price / hour</span>
+            <span>{isPlayStation ? "Price / controller / hour" : "Price / hour"}</span>
             <span className="field__control field__control--money">
               <i aria-hidden="true">$</i>
               <input
@@ -177,10 +214,40 @@ export function SessionPanel({
                 disabled={busy}
               />
             </span>
-            <small id="rate-hint">Updates the live total</small>
+            <small id="rate-hint">{isPlayStation ? "Base price for one controller" : "Updates the live total"}</small>
           </label>
 
-          <label className="field">
+          {isPlayStation && (
+            <label className="field">
+              <span>Number of Controllers</span>
+              <span className="field__control">
+                <input
+                  type="number"
+                  min="1"
+                  max="99"
+                  step="1"
+                  inputMode="numeric"
+                  value={controllerCount}
+                  onChange={(event) => {
+                    if (event.target.value === "") {
+                      setControllerCount("");
+                      return;
+                    }
+                    const nextCount = Math.min(99, Math.max(1, Number(event.target.value) || 1));
+                    setControllerCount(nextCount);
+                    if (!isAvailable) onControllerCountChange(nextCount);
+                  }}
+                  onBlur={() => {
+                    if (controllerCount === "") setControllerCount(normalizedControllerCount);
+                  }}
+                  disabled={busy}
+                />
+              </span>
+              <small>{isAvailable ? "Set before starting" : "Updates the live total"}</small>
+            </label>
+          )}
+
+          <label className={`field${isPlayStation ? " field--playstation-start" : ""}`}>
             <span>Start time</span>
             <span className="field__control">
               <input
@@ -196,14 +263,14 @@ export function SessionPanel({
 
         <footer className={`session-actions${isAvailable ? "" : " session-actions--live"}`}>
           {isAvailable ? (
-            <button className="button button--primary button--wide" type="button" onClick={onStart} disabled={busy}>
+            <button className="button button--primary button--wide" type="button" onClick={() => onStart(normalizedControllerCount)} disabled={busy}>
               <PlayIcon />
               Start session
             </button>
           ) : (
             <>
               <div className="session-actions__primary">
-                {station.status === "paused" && (
+                {station.status === "paused" && confirmationMode !== "end" && (
                   <button className="button button--primary" type="button" onClick={onResume} disabled={busy}>
                     <PlayIcon />
                     Resume
@@ -225,7 +292,7 @@ export function SessionPanel({
                     </label>
                     {endTimeError && <p className="end-time-error" id="end-time-error">{endTimeError}</p>}
                     <div className="end-confirmation__actions">
-                      <button ref={safeActionRef} type="button" onClick={() => setConfirmationMode(null)} disabled={busy}>Keep session</button>
+                      <button ref={safeActionRef} type="button" onClick={keepSession} disabled={busy}>Keep session</button>
                       <button type="button" onClick={confirmEnd} disabled={busy || Boolean(endTimeError)}>{busy ? "Ending…" : "Confirm end"}</button>
                     </div>
                   </div>

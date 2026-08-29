@@ -39,6 +39,15 @@ function parseRate(value, { optional = true } = {}) {
   return { value: rate };
 }
 
+function parseControllerCount(value) {
+  if (value === undefined || value === null || value === "") return { value: undefined };
+  const controllerCount = Number(value);
+  if (!Number.isInteger(controllerCount) || controllerCount < 1 || controllerCount > 99) {
+    return { error: "controllerCount must be an integer between 1 and 99" };
+  }
+  return { value: controllerCount };
+}
+
 export function validateSessionId(request) {
   return uuidPattern.test(request.params.id)
     ? success({ sessionId: request.params.id })
@@ -48,12 +57,16 @@ export function validateSessionId(request) {
 export function validateCreateSession(request) {
   const stationId = request.body?.stationId;
   const rate = parseRate(request.body?.hourlyRate);
+  const controllerCount = parseControllerCount(request.body?.controllerCount);
   const errors = [];
   if (typeof stationId !== "string" || !uuidPattern.test(stationId)) {
     errors.push("stationId must be a valid UUID");
   }
   if (rate.error) errors.push(rate.error);
-  return errors.length ? failure(...errors) : success({ stationId, hourlyRate: rate.value });
+  if (controllerCount.error) errors.push(controllerCount.error);
+  return errors.length
+    ? failure(...errors)
+    : success({ stationId, hourlyRate: rate.value, controllerCount: controllerCount.value });
 }
 
 export function validateStartSession(request) {
@@ -76,19 +89,36 @@ export function validateEndSession(request) {
     : success({ sessionId: request.params.id, endedAt: endedAt.value });
 }
 
+export function validatePauseSession(request) {
+  const idResult = validateSessionId(request);
+  const pausedAt = parseTimestamp(request.body?.pausedAt, "pausedAt");
+  const errors = [...(idResult.errors ?? [])];
+  if (pausedAt.error) errors.push(pausedAt.error);
+  return errors.length
+    ? failure(...errors)
+    : success({ sessionId: request.params.id, pausedAt: pausedAt.value });
+}
+
 export function validateUpdateSession(request) {
   const idResult = validateSessionId(request);
   const rate = parseRate(request.body?.hourlyRate);
+  const controllerCount = parseControllerCount(request.body?.controllerCount);
   const startTime = parseDate(request.body?.startTime, "startTime");
   const errors = [...(idResult.errors ?? [])];
   if (rate.error) errors.push(rate.error);
+  if (controllerCount.error) errors.push(controllerCount.error);
   if (startTime.error) errors.push(startTime.error);
-  if (rate.value === undefined && startTime.value === undefined) {
-    errors.push("Provide hourlyRate or startTime");
+  if (rate.value === undefined && controllerCount.value === undefined && startTime.value === undefined) {
+    errors.push("Provide hourlyRate, controllerCount, or startTime");
   }
   return errors.length
     ? failure(...errors)
-    : success({ sessionId: request.params.id, hourlyRate: rate.value, startTime: startTime.value });
+    : success({
+      sessionId: request.params.id,
+      hourlyRate: rate.value,
+      controllerCount: controllerCount.value,
+      startTime: startTime.value,
+    });
 }
 
 export function validateCompletedSessions(request) {

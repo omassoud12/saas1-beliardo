@@ -111,8 +111,11 @@ export async function fetchActiveSessions() {
   };
 }
 
-export async function createSession(stationId, hourlyRate) {
-  const payload = await apiRequest("/sessions", { method: "POST", body: JSON.stringify({ stationId, hourlyRate }) });
+export async function createSession(stationId, hourlyRate, controllerCount) {
+  const payload = await apiRequest("/sessions", {
+    method: "POST",
+    body: JSON.stringify({ stationId, hourlyRate, ...(controllerCount ? { controllerCount } : {}) }),
+  });
   return payload.data.session;
 }
 
@@ -121,8 +124,11 @@ export async function startSession(sessionId, startTime) {
   return payload.data.session;
 }
 
-export async function pauseSession(sessionId) {
-  const payload = await apiRequest(`/sessions/${sessionId}/pause`, { method: "POST", body: "{}" });
+export async function pauseSession(sessionId, pausedAt) {
+  const payload = await apiRequest(`/sessions/${sessionId}/pause`, {
+    method: "POST",
+    body: JSON.stringify({ pausedAt }),
+  });
   return payload.data.session;
 }
 

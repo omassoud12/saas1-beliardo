@@ -7,7 +7,7 @@ import {
   getSession, pauseSession, resumeSession, startSession, updateSession,
 } from "./session.controller.js";
 import {
-  validateCompletedSessions, validateCreateSession, validateEndSession, validateSessionId,
+  validateCompletedSessions, validateCreateSession, validateEndSession, validatePauseSession, validateSessionId,
   validateStartSession, validateUpdateSession,
 } from "./session.validation.js";
 
@@ -20,7 +20,7 @@ router.get("/active", getActiveSessions);
 router.get("/completed", requireApprovedOwner, validateRequest(validateCompletedSessions), getCompletedSessions);
 router.get("/:id", validateRequest(validateSessionId), getSession);
 router.post("/:id/start", validateRequest(validateStartSession), startSession);
-router.post("/:id/pause", validateRequest(validateSessionId), pauseSession);
+router.post("/:id/pause", validateRequest(validatePauseSession), pauseSession);
 router.post("/:id/resume", validateRequest(validateSessionId), resumeSession);
 router.patch("/:id", validateRequest(validateUpdateSession), updateSession);
 router.post("/:id/cancel", validateRequest(validateSessionId), cancelSession);

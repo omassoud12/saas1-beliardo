@@ -1,17 +1,22 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createSessionService } from "../src/features/sessions/session.service.js";
-import { validateEndSession } from "../src/features/sessions/session.validation.js";
+import {
+  validateCreateSession,
+  validateEndSession,
+  validatePauseSession,
+  validateUpdateSession,
+} from "../src/features/sessions/session.validation.js";
 
-function createHarness({ cancelFailure = null, endFailure = null } = {}) {
+function createHarness({ cancelFailure = null, endFailure = null, stationType = "billiard", hourlyRate = 12 } = {}) {
   let now = new Date("2026-08-24T10:00:00.000Z");
-  const station = { id: "station-1", status: "available", hourlyRate: 12 };
+  const station = { id: "station-1", status: "available", type: stationType, hourlyRate };
   const records = new Map();
   let sequence = 0;
   const mapFields = {
     started_at: "startedAt", paused_at: "pausedAt", ended_at: "endedAt",
     total_paused_seconds: "totalPausedSeconds", final_elapsed_seconds: "finalElapsedSeconds",
-    final_cost: "finalCost", hourly_rate: "hourlyRate",
+    final_cost: "finalCost", hourly_rate: "hourlyRate", controller_count: "controllerCount",
     cancelled_at: "cancelledAt", cancelled_by: "cancelledBy",
     ended_recorded_at: "endedRecordedAt", ended_by: "endedBy", pause_intervals: "pauseIntervals",
   };
@@ -20,6 +25,7 @@ function createHarness({ cancelFailure = null, endFailure = null } = {}) {
       const record = {
         id: `session-${++sequence}`, stationId: values.stationId, businessId: values.businessId,
         createdBy: values.createdBy, status: "draft", hourlyRate: values.hourlyRate,
+        controllerCount: values.controllerCount,
         startedAt: null, pausedAt: null, endedAt: null, totalPausedSeconds: 0,
         finalElapsedSeconds: null, finalCost: null, cancelledAt: null, cancelledBy: null,
         endedRecordedAt: null, endedBy: null, pauseIntervals: [], updatedAt: now.toISOString(),
@@ -131,6 +137,78 @@ test("invalid lifecycle transitions are rejected", async () => {
   await assert.rejects(
     service.end({ businessId: "business-1", sessionId: created.id, userId: "user-1" }),
     (error) => error.statusCode === 409 && error.code === "INVALID_SESSION_TRANSITION",
+  );
+});
+
+test("captured End Session time freezes billing and Keep Session resumes the same session", async () => {
+  const harness = createHarness({ stationType: "playstation", hourlyRate: 2 });
+  const created = await harness.service.create({
+    businessId: "business-1", userId: "user-1", stationId: "station-1", controllerCount: 2,
+  });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+
+  harness.setTime("2026-08-24T10:40:00.000Z");
+  const paused = await harness.service.pause({
+    businessId: "business-1",
+    sessionId: created.id,
+    pausedAt: "2026-08-24T10:30:00.000Z",
+  });
+  assert.equal(paused.id, created.id);
+  assert.equal(paused.pausedAt, "2026-08-24T10:30:00.000Z");
+  assert.equal(paused.controllerCount, 2);
+
+  harness.setTime("2026-08-24T10:50:00.000Z");
+  const resumed = await harness.service.resume({ businessId: "business-1", sessionId: created.id });
+  assert.equal(resumed.id, created.id);
+  assert.equal(resumed.totalPausedSeconds, 1200);
+  assert.equal(resumed.controllerCount, 2);
+
+  harness.setTime("2026-08-24T11:20:00.000Z");
+  const ended = await harness.service.end({
+    businessId: "business-1", sessionId: created.id, userId: "user-1",
+  });
+  assert.equal(ended.finalElapsedSeconds, 3600);
+  assert.equal(ended.finalCost, 4);
+});
+
+test("PlayStation controller count multiplies the hourly and final session cost", async () => {
+  const harness = createHarness({ stationType: "playstation", hourlyRate: 2 });
+  const created = await harness.service.create({
+    businessId: "business-1", userId: "user-1", stationId: "station-1", controllerCount: 1,
+  });
+  assert.equal(created.hourlyRate, 2);
+  assert.equal(created.controllerCount, 1);
+
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+  const updated = await harness.service.update({
+    businessId: "business-1", sessionId: created.id, controllerCount: 3,
+  });
+  assert.equal(updated.controllerCount, 3);
+  harness.setTime("2026-08-24T11:00:00.000Z");
+  const ended = await harness.service.end({
+    businessId: "business-1", sessionId: created.id, userId: "user-1",
+  });
+
+  assert.equal(ended.finalElapsedSeconds, 3600);
+  assert.equal(ended.finalCost, 6);
+});
+
+test("non-PlayStation sessions stay at one controller and reject multi-controller creation", async () => {
+  const harness = createHarness({ stationType: "billiard", hourlyRate: 2 });
+  await assert.rejects(
+    harness.service.create({
+      businessId: "business-1", userId: "user-1", stationId: "station-1", controllerCount: 2,
+    }),
+    (error) => error.statusCode === 400 && error.code === "CONTROLLER_COUNT_NOT_ALLOWED",
+  );
+
+  const created = await harness.service.create({
+    businessId: "business-1", userId: "user-1", stationId: "station-1",
+  });
+  assert.equal(created.controllerCount, 1);
+  await assert.rejects(
+    harness.service.update({ businessId: "business-1", sessionId: created.id, controllerCount: 2 }),
+    (error) => error.statusCode === 400 && error.code === "CONTROLLER_COUNT_NOT_ALLOWED",
   );
 });
 
@@ -343,5 +421,35 @@ test("end request validation accepts an optional ISO timestamp and rejects date-
   assert.equal(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27" } }).success, false);
   assert.deepEqual(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27T11:30:00+03:00" } }), {
     success: true, data: { sessionId: id, endedAt: "2026-08-27T08:30:00.000Z" },
+  });
+});
+
+test("pause request validation accepts an optional captured ISO timestamp", () => {
+  const id = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(validatePauseSession({ params: { id }, body: {} }), {
+    success: true, data: { sessionId: id, pausedAt: undefined },
+  });
+  assert.equal(validatePauseSession({ params: { id }, body: { pausedAt: "2026-08-27" } }).success, false);
+  assert.deepEqual(validatePauseSession({ params: { id }, body: { pausedAt: "2026-08-27T11:30:00+03:00" } }), {
+    success: true, data: { sessionId: id, pausedAt: "2026-08-27T08:30:00.000Z" },
+  });
+});
+
+test("create request validation accepts only bounded integer controller counts", () => {
+  const stationId = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(validateCreateSession({ params: {}, body: { stationId, hourlyRate: 2, controllerCount: 3 } }), {
+    success: true,
+    data: { stationId, hourlyRate: 2, controllerCount: 3 },
+  });
+  assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 0 } }).success, false);
+  assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 2.5 } }).success, false);
+  assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 100 } }).success, false);
+});
+
+test("update request validation accepts a live controller count change", () => {
+  const sessionId = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(validateUpdateSession({ params: { id: sessionId }, body: { controllerCount: 4 } }), {
+    success: true,
+    data: { sessionId, hourlyRate: undefined, controllerCount: 4, startTime: undefined },
   });
 });

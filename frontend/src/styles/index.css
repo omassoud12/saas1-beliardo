@@ -654,6 +654,10 @@ input,
   border-bottom: 1px solid var(--border);
 }
 
+.field--playstation-start {
+  grid-column: 1 / -1;
+}
+
 .field {
   display: block;
   min-width: 0;

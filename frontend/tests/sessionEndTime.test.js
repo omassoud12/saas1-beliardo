@@ -4,6 +4,7 @@ import {
   formatDateTimeInput,
   formatZonedTimeInput,
   getAdjustedSessionPreview,
+  getCurrentCost,
   zonedDateTimeToTimestamp,
   zonedTimeToTimestamp,
 } from "../src/utils/session.js";
@@ -60,4 +61,28 @@ test("preview flags legacy cumulative pause data that cannot be backdated safely
     pauseIntervals: [],
   }, Date.parse("2026-08-27T10:30:00.000Z"));
   assert.equal(preview.hasUntrackedPause, true);
+});
+
+test("PlayStation live cost multiplies the per-controller rate", () => {
+  const start = Date.parse("2026-08-27T10:00:00.000Z");
+  assert.equal(getCurrentCost({
+    type: "playstation",
+    status: "active",
+    sessionStartAt: start,
+    totalPausedMs: 0,
+    hourlyRate: 2,
+    controllerCount: 3,
+  }, start + 3_600_000), 6);
+});
+
+test("non-PlayStation live cost ignores controller count", () => {
+  const start = Date.parse("2026-08-27T10:00:00.000Z");
+  assert.equal(getCurrentCost({
+    type: "billiard",
+    status: "active",
+    sessionStartAt: start,
+    totalPausedMs: 0,
+    hourlyRate: 2,
+    controllerCount: 3,
+  }, start + 3_600_000), 2);
 });

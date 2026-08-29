@@ -11,7 +11,8 @@ export function getElapsedSeconds(table, now = Date.now()) {
 }
 
 export function getCurrentCost(table, now = Date.now()) {
-  return (getElapsedSeconds(table, now) / 3600) * table.hourlyRate;
+  const controllerCount = table.type === "playstation" ? (Number(table.controllerCount) || 1) : 1;
+  return (getElapsedSeconds(table, now) / 3600) * table.hourlyRate * controllerCount;
 }
 
 export function formatDuration(totalSeconds) {
@@ -141,10 +142,11 @@ export function getAdjustedSessionPreview(station, selectedEnd) {
     pausedSeconds += clippedIntervalSeconds(station.pausedAt, selectedEnd, sessionStart, selectedEnd);
   }
   const elapsedSeconds = Math.max(0, Math.floor((selectedEnd - sessionStart) / 1000) - pausedSeconds);
+  const controllerCount = station.type === "playstation" ? (Number(station.controllerCount) || 1) : 1;
   return {
     elapsedSeconds,
     pausedSeconds,
-    cost: Math.round(((elapsedSeconds / 3600) * station.hourlyRate) * 100) / 100,
+    cost: Math.round(((elapsedSeconds / 3600) * station.hourlyRate * controllerCount) * 100) / 100,
     hasUntrackedPause: Math.floor((station.totalPausedMs ?? 0) / 1000) > trackedCompletedSeconds,
   };
 }

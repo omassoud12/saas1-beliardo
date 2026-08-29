@@ -10,6 +10,7 @@ export function mapSession(row) {
     stationId: row.station_id,
     status: row.status,
     hourlyRate: Number(row.hourly_rate),
+    controllerCount: Number(row.controller_count) || 1,
     startedAt: row.started_at,
     pausedAt: row.paused_at,
     endedAt: row.ended_at,
@@ -29,7 +30,7 @@ export function mapSession(row) {
 }
 
 const selectFields = `
-  id, business_id, station_id, status, hourly_rate, started_at, paused_at,
+  id, business_id, station_id, status, hourly_rate, controller_count, started_at, paused_at,
   ended_at, ended_recorded_at, ended_by, cancelled_at, cancelled_by, pause_intervals,
   total_paused_seconds, final_elapsed_seconds, final_cost,
   created_by, created_at, updated_at,
@@ -45,6 +46,7 @@ export const sessionRepository = {
         station_id: values.stationId,
         status: "draft",
         hourly_rate: values.hourlyRate,
+        controller_count: values.controllerCount,
         created_by: values.createdBy,
       })
       .select(selectFields)

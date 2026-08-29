@@ -6,7 +6,7 @@ import { PasswordSetup } from "./components/PasswordSetup";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
-  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions,
+  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
   resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
 import { Home } from "./pages/Home";
@@ -192,13 +192,14 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
   }, [selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
-  const handleStart = useCallback(async () => {
+  const handleStart = useCallback(async (requestedControllerCount = 1) => {
     const station = stations.find((item) => item.id === selectedStationId);
     if (!station || sessionActionPending) return;
     setSessionActionPending(true);
     let draft;
     try {
-      draft = await createSession(station.id, station.hourlyRate);
+      const controllerCount = station.type === "playstation" ? requestedControllerCount : undefined;
+      draft = await createSession(station.id, station.hourlyRate, controllerCount);
       const startTime = new Date(station.plannedStartAt ?? Date.now()).toISOString();
       const session = await startSession(draft.id, startTime);
       setSessionIds((current) => ({ ...current, [station.id]: session.id }));
@@ -216,18 +217,42 @@ function AuthenticatedApp({ onSignOut, access }) {
     const sessionId = sessionIds[selectedStationId];
     if (!sessionId || sessionActionPending) {
       showNotice("Live session record not found");
-      return;
+      return false;
     }
     setSessionActionPending(true);
     try {
       const session = await resumeSession(sessionId);
       updateSelectedStation((station) => stationFromSession(station, session));
+      return true;
     } catch (error) {
       showNotice(error.message || "Unable to resume session");
+      return false;
     } finally {
       setSessionActionPending(false);
     }
   }, [selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
+
+  const handleBeginEnd = useCallback(async (stoppedAt) => {
+    const currentStation = stations.find((station) => station.id === selectedStationId);
+    const sessionId = sessionIds[selectedStationId];
+    if (!currentStation || !sessionId || sessionActionPending) {
+      showNotice("Live session record not found");
+      return false;
+    }
+    if (currentStation.status === "paused") return true;
+
+    setSessionActionPending(true);
+    try {
+      const session = await pauseSession(sessionId, new Date(stoppedAt).toISOString());
+      updateSelectedStation((station) => stationFromSession(station, session));
+      return true;
+    } catch (error) {
+      showNotice(error.message || "Unable to stop session");
+      return false;
+    } finally {
+      setSessionActionPending(false);
+    }
+  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleEnd = useCallback(async (endedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
@@ -300,6 +325,25 @@ function AuthenticatedApp({ onSignOut, access }) {
     }
   }, [selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
+  const handleControllerCountChange = useCallback(async (value) => {
+    const controllerCount = Math.min(99, Math.max(1, Number(value) || 1));
+    const previousControllerCount = Number(selectedStation?.controllerCount) || 1;
+    const sessionId = sessionIds[selectedStationId];
+    if (!sessionId || selectedStation?.type !== "playstation" || sessionActionPending) return;
+
+    updateSelectedStation((station) => ({ ...station, controllerCount }));
+    setSessionActionPending(true);
+    try {
+      const session = await updateSession(sessionId, { controllerCount });
+      updateSelectedStation((station) => ({ ...station, controllerCount: session.controllerCount }));
+    } catch (error) {
+      updateSelectedStation((station) => ({ ...station, controllerCount: previousControllerCount }));
+      showNotice(error.message || "Unable to update the controller count");
+    } finally {
+      setSessionActionPending(false);
+    }
+  }, [selectedStation, selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
+
   return (
     <div className="app-shell">
       <div className="ambient ambient--one" aria-hidden="true" />
@@ -330,9 +374,12 @@ function AuthenticatedApp({ onSignOut, access }) {
           station={selectedStation}
           onClose={handleClosePanel}
           onRateChange={handleRateChange}
+          onControllerCountChange={handleControllerCountChange}
           onStartTimeChange={handleStartTimeChange}
           onStart={handleStart}
           onResume={handleResume}
+          onBeginEnd={handleBeginEnd}
+          onKeep={handleResume}
           onEnd={handleEnd}
           onCancel={handleCancel}
           timezone={access.tenant.timezone}
@@ -354,6 +401,7 @@ function stationFromSession(station, session) {
     ...station,
     status: session.status,
     hourlyRate: session.hourlyRate,
+    controllerCount: session.controllerCount ?? 1,
     sessionStartAt: session.startedAt ? new Date(session.startedAt).getTime() : null,
     pausedAt: session.pausedAt ? new Date(session.pausedAt).getTime() : null,
     totalPausedMs: Number(session.totalPausedSeconds || 0) * 1000,
@@ -363,5 +411,5 @@ function stationFromSession(station, session) {
 }
 
 function resetStationSession(station) {
-  return { ...station, status: "available", sessionStartAt: null, pausedAt: null, totalPausedMs: 0, pauseIntervals: [], plannedStartAt: null };
+  return { ...station, status: "available", sessionStartAt: null, pausedAt: null, totalPausedMs: 0, pauseIntervals: [], plannedStartAt: null, controllerCount: 1 };
 }

@@ -16,7 +16,8 @@ function elapsedSeconds(session, at) {
 }
 
 function currentCost(session, seconds) {
-  return Math.round(((seconds / 3600) * session.hourlyRate) * 100) / 100;
+  const controllerCount = Number(session.controllerCount) || 1;
+  return Math.round(((seconds / 3600) * session.hourlyRate * controllerCount) * 100) / 100;
 }
 
 function intervalSeconds(interval, sessionStartMs, selectedEndMs) {
@@ -75,7 +76,7 @@ export function createSessionService({
   }
 
   return {
-    async create({ businessId, userId, stationId, hourlyRate }) {
+    async create({ businessId, userId, stationId, hourlyRate, controllerCount }) {
       const station = await stations.findById(businessId, stationId);
       if (!station) throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
       if (station.status !== "available") {
@@ -84,11 +85,19 @@ export function createSessionService({
       if (await sessions.findOpenByStation(businessId, stationId)) {
         throw new AppError(409, "Station already has an open session", "OPEN_SESSION_EXISTS");
       }
+      if (station.type !== "playstation" && controllerCount !== undefined && controllerCount !== 1) {
+        throw new AppError(
+          400,
+          "controllerCount is only available for PlayStation sessions",
+          "CONTROLLER_COUNT_NOT_ALLOWED",
+        );
+      }
       return present(await sessions.create({
         businessId,
         stationId,
         createdBy: userId,
         hourlyRate: hourlyRate ?? station.hourlyRate,
+        controllerCount: station.type === "playstation" ? (controllerCount ?? 1) : 1,
       }));
     },
 
@@ -140,14 +149,27 @@ export function createSessionService({
       return present(updated);
     },
 
-    async pause({ businessId, sessionId }) {
+    async pause({ businessId, sessionId, pausedAt }) {
       const session = await requireSession(businessId, sessionId);
       if (session.status !== SESSION_STATUS.ACTIVE) {
         throw new AppError(409, "Only an active session can be paused", "INVALID_SESSION_TRANSITION");
       }
+      const now = clock();
+      const selectedPause = pausedAt === undefined ? now : new Date(pausedAt);
+      const selectedPauseMs = selectedPause.getTime();
+      const startMs = new Date(session.startedAt).getTime();
+      if (!Number.isFinite(selectedPauseMs)) {
+        throw new AppError(400, "pausedAt must be a valid ISO date", "INVALID_PAUSE_TIME");
+      }
+      if (selectedPauseMs < startMs) {
+        throw new AppError(400, "pausedAt cannot be before the session start", "INVALID_PAUSE_TIME");
+      }
+      if (selectedPauseMs > now.getTime()) {
+        throw new AppError(400, "pausedAt cannot be in the future", "INVALID_PAUSE_TIME");
+      }
       const updated = await sessions.update(businessId, sessionId, {
         status: SESSION_STATUS.PAUSED,
-        paused_at: clock().toISOString(),
+        paused_at: selectedPause.toISOString(),
       });
       await stations.updateStatus(businessId, session.stationId, "paused");
       return present(updated);
@@ -175,13 +197,25 @@ export function createSessionService({
       return present(updated);
     },
 
-    async update({ businessId, sessionId, hourlyRate, startTime }) {
+    async update({ businessId, sessionId, hourlyRate, controllerCount, startTime }) {
       const session = await requireSession(businessId, sessionId);
       if ([SESSION_STATUS.COMPLETED, SESSION_STATUS.CANCELLED].includes(session.status)) {
         throw new AppError(409, "Completed or cancelled sessions cannot be edited", "INVALID_SESSION_TRANSITION");
       }
       const values = {};
       if (hourlyRate !== undefined) values.hourly_rate = hourlyRate;
+      if (controllerCount !== undefined) {
+        const station = await stations.findById(businessId, session.stationId);
+        if (!station) throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
+        if (station.type !== "playstation") {
+          throw new AppError(
+            400,
+            "controllerCount is only available for PlayStation sessions",
+            "CONTROLLER_COUNT_NOT_ALLOWED",
+          );
+        }
+        values.controller_count = controllerCount;
+      }
       if (startTime !== undefined) {
         const start = new Date(startTime);
         if (start.getTime() > clock().getTime()) {
