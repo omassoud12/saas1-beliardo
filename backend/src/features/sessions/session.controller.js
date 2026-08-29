@@ -37,6 +37,17 @@ export async function getActiveSessions(request, response, next) {
   } catch (error) { return next(error); }
 }
 
+export async function startNewSession(request, response, next) {
+  try {
+    const session = await sessionService.startNew({
+      businessId: request.auth.businessId,
+      userId: request.auth.user.id,
+      ...request.validated,
+    });
+    return sendSuccess(response, { statusCode: 201, data: { session }, message: "Session started" });
+  } catch (error) { return next(error); }
+}
+
 export async function getCompletedSessions(request, response, next) {
   try {
     const sessions = await sessionService.getCompleted({

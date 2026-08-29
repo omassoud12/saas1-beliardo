@@ -119,6 +119,19 @@ export async function createSession(stationId, hourlyRate, controllerCount) {
   return payload.data.session;
 }
 
+export async function startNewSession(stationId, hourlyRate, controllerCount, startTime) {
+  const payload = await apiRequest("/sessions/start", {
+    method: "POST",
+    body: JSON.stringify({
+      stationId,
+      hourlyRate,
+      ...(controllerCount ? { controllerCount } : {}),
+      startTime,
+    }),
+  });
+  return payload.data.session;
+}
+
 export async function startSession(sessionId, startTime) {
   const payload = await apiRequest(`/sessions/${sessionId}/start`, { method: "POST", body: JSON.stringify({ startTime }) });
   return payload.data.session;

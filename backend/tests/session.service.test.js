@@ -5,6 +5,7 @@ import {
   validateCreateSession,
   validateEndSession,
   validatePauseSession,
+  validateStartNewSession,
   validateUpdateSession,
 } from "../src/features/sessions/session.validation.js";
 
@@ -12,6 +13,7 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
   let now = new Date("2026-08-24T10:00:00.000Z");
   const station = { id: "station-1", status: "available", type: stationType, hourlyRate };
   const records = new Map();
+  const calls = { startNew: 0 };
   let sequence = 0;
   const mapFields = {
     started_at: "startedAt", paused_at: "pausedAt", ended_at: "endedAt",
@@ -21,6 +23,30 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
     ended_recorded_at: "endedRecordedAt", ended_by: "endedBy", pause_intervals: "pauseIntervals",
   };
   const sessions = {
+    async startNew(values) {
+      calls.startNew += 1;
+      if (station.status !== "available") return { outcome: "station_unavailable", session: null };
+      const openSession = [...records.values()].find((record) => (
+        record.businessId === values.businessId
+        && record.stationId === values.stationId
+        && ["draft", "active", "paused"].includes(record.status)
+      ));
+      if (openSession) return { outcome: "open_session_exists", session: null };
+      if (station.type !== "playstation" && values.controllerCount !== undefined && values.controllerCount !== 1) {
+        return { outcome: "controller_count_not_allowed", session: null };
+      }
+      const record = {
+        id: `session-${++sequence}`, stationId: values.stationId, businessId: values.businessId,
+        createdBy: values.startedBy, status: "active", hourlyRate: values.hourlyRate ?? station.hourlyRate,
+        controllerCount: station.type === "playstation" ? (values.controllerCount ?? 1) : 1,
+        startedAt: values.startedAt, pausedAt: null, endedAt: null, totalPausedSeconds: 0,
+        finalElapsedSeconds: null, finalCost: null, cancelledAt: null, cancelledBy: null,
+        endedRecordedAt: null, endedBy: null, pauseIntervals: [], updatedAt: now.toISOString(),
+      };
+      records.set(record.id, record);
+      station.status = "active";
+      return { outcome: "started", session: { ...record } };
+    },
     async create(values) {
       const record = {
         id: `session-${++sequence}`, stationId: values.stationId, businessId: values.businessId,
@@ -96,9 +122,44 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
     service,
     station,
     records,
+    calls,
     setTime(value) { now = new Date(value); },
   };
 }
+
+test("atomic start creates one active PlayStation session in one repository operation", async () => {
+  const harness = createHarness({ stationType: "playstation", hourlyRate: 2 });
+  const session = await harness.service.startNew({
+    businessId: "business-1",
+    userId: "user-1",
+    stationId: "station-1",
+    hourlyRate: 2,
+    controllerCount: 3,
+    startTime: "2026-08-24T09:45:00.000Z",
+  });
+
+  assert.equal(harness.calls.startNew, 1);
+  assert.equal(harness.records.size, 1);
+  assert.equal(session.status, "active");
+  assert.equal(session.startedAt, "2026-08-24T09:45:00.000Z");
+  assert.equal(session.controllerCount, 3);
+  assert.equal(session.hourlyRate, 2);
+  assert.equal(harness.station.status, "active");
+});
+
+test("atomic start rejects a future time before calling the repository", async () => {
+  const harness = createHarness();
+  await assert.rejects(
+    harness.service.startNew({
+      businessId: "business-1",
+      userId: "user-1",
+      stationId: "station-1",
+      startTime: "2026-08-24T10:00:01.000Z",
+    }),
+    (error) => error.statusCode === 400 && error.code === "INVALID_START_TIME",
+  );
+  assert.equal(harness.calls.startNew, 0);
+});
 
 test("session lifecycle excludes paused time and calculates final cost", async () => {
   const harness = createHarness();
@@ -432,6 +493,27 @@ test("pause request validation accepts an optional captured ISO timestamp", () =
   assert.equal(validatePauseSession({ params: { id }, body: { pausedAt: "2026-08-27" } }).success, false);
   assert.deepEqual(validatePauseSession({ params: { id }, body: { pausedAt: "2026-08-27T11:30:00+03:00" } }), {
     success: true, data: { sessionId: id, pausedAt: "2026-08-27T08:30:00.000Z" },
+  });
+});
+
+test("atomic start request validation combines creation and start fields", () => {
+  const stationId = "123e4567-e89b-42d3-a456-426614174000";
+  assert.deepEqual(validateStartNewSession({
+    params: {},
+    body: {
+      stationId,
+      hourlyRate: 2,
+      controllerCount: 3,
+      startTime: "2026-08-27T11:30:00+03:00",
+    },
+  }), {
+    success: true,
+    data: {
+      stationId,
+      hourlyRate: 2,
+      controllerCount: 3,
+      startTime: "2026-08-27T08:30:00.000Z",
+    },
   });
 });
 

@@ -76,6 +76,38 @@ export function createSessionService({
   }
 
   return {
+    async startNew({ businessId, userId, stationId, hourlyRate, controllerCount, startTime }) {
+      const now = clock();
+      const startedAt = startTime ? new Date(startTime) : now;
+      if (startedAt.getTime() > now.getTime()) {
+        throw new AppError(400, "startTime cannot be in the future", "INVALID_START_TIME");
+      }
+
+      const result = await sessions.startNew({
+        businessId,
+        startedBy: userId,
+        stationId,
+        hourlyRate,
+        controllerCount,
+        startedAt: startedAt.toISOString(),
+      });
+      if (result.outcome === "forbidden") throw new AppError(403, "Session start is not permitted", "FORBIDDEN");
+      if (result.outcome === "station_not_found") throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
+      if (result.outcome === "station_unavailable") throw new AppError(409, "Station is not available", "STATION_UNAVAILABLE");
+      if (result.outcome === "open_session_exists") throw new AppError(409, "Station already has an open session", "OPEN_SESSION_EXISTS");
+      if (result.outcome === "invalid_start_time") throw new AppError(400, "startTime cannot be in the future", "INVALID_START_TIME");
+      if (result.outcome === "invalid_controller_count") {
+        throw new AppError(400, "controllerCount must be an integer between 1 and 99", "INVALID_CONTROLLER_COUNT");
+      }
+      if (result.outcome === "controller_count_not_allowed") {
+        throw new AppError(400, "controllerCount is only available for PlayStation sessions", "CONTROLLER_COUNT_NOT_ALLOWED");
+      }
+      if (result.outcome !== "started" || !result.session) {
+        throw new AppError(409, "Unable to start session", "SESSION_START_FAILED");
+      }
+      return present(result.session);
+    },
+
     async create({ businessId, userId, stationId, hourlyRate, controllerCount }) {
       const station = await stations.findById(businessId, stationId);
       if (!station) throw new AppError(404, "Station not found", "STATION_NOT_FOUND");

@@ -264,8 +264,8 @@ export function SessionPanel({
         <footer className={`session-actions${isAvailable ? "" : " session-actions--live"}`}>
           {isAvailable ? (
             <button className="button button--primary button--wide" type="button" onClick={() => onStart(normalizedControllerCount)} disabled={busy}>
-              <PlayIcon />
-              Start session
+              {busy ? <span className="button__spinner" aria-hidden="true" /> : <PlayIcon />}
+              {busy ? "Starting..." : "Start session"}
             </button>
           ) : (
             <>

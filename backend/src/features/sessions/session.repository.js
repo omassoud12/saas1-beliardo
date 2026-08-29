@@ -38,6 +38,23 @@ const selectFields = `
 `;
 
 export const sessionRepository = {
+  async startNew(values) {
+    const { data, error } = await getSupabaseAdmin().rpc("start_session_atomic", {
+      p_business_id: values.businessId,
+      p_started_by: values.startedBy,
+      p_station_id: values.stationId,
+      p_hourly_rate: values.hourlyRate,
+      p_controller_count: values.controllerCount ?? null,
+      p_started_at: values.startedAt,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "station_not_found", session_record: null };
+    return {
+      outcome: result.outcome,
+      session: mapSession(result.session_record),
+    };
+  },
+
   async create(values) {
     const { data, error } = await getSupabaseAdmin()
       .from("sessions")

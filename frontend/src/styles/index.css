@@ -573,6 +573,16 @@ input,
   stroke: none;
 }
 
+.button__spinner {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 2px solid rgba(16, 32, 22, 0.3);
+  border-top-color: currentColor;
+  border-radius: 50%;
+  animation: auth-spin 700ms linear infinite;
+}
+
 .session-readout {
   display: grid;
   grid-template-columns: minmax(0, 1.55fr) minmax(190px, 0.85fr);

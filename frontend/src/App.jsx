@@ -6,8 +6,8 @@ import { PasswordSetup } from "./components/PasswordSetup";
 import { createStation, getStationName, sortStations } from "./data/stationTypes";
 import { usePersistentStations } from "./hooks/usePersistentStations";
 import {
-  cancelSession, createSession, deleteSession, endSession, fetchActiveSessions, pauseSession,
-  resumeSession, startSession, updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
+  cancelSession, endSession, fetchActiveSessions, pauseSession, resumeSession, startNewSession,
+  updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
 import { Home } from "./pages/Home";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
@@ -196,17 +196,14 @@ function AuthenticatedApp({ onSignOut, access }) {
     const station = stations.find((item) => item.id === selectedStationId);
     if (!station || sessionActionPending) return;
     setSessionActionPending(true);
-    let draft;
     try {
       const controllerCount = station.type === "playstation" ? requestedControllerCount : undefined;
-      draft = await createSession(station.id, station.hourlyRate, controllerCount);
       const startTime = new Date(station.plannedStartAt ?? Date.now()).toISOString();
-      const session = await startSession(draft.id, startTime);
+      const session = await startNewSession(station.id, station.hourlyRate, controllerCount, startTime);
       setSessionIds((current) => ({ ...current, [station.id]: session.id }));
       updateSelectedStation((current) => stationFromSession(current, session));
       showNotice(`${getStationName(station)} session started`);
     } catch (error) {
-      if (draft?.id) deleteSession(draft.id).catch(() => {});
       showNotice(error.message || "Unable to start session");
     } finally {
       setSessionActionPending(false);

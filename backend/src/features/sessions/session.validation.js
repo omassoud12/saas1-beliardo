@@ -79,6 +79,16 @@ export function validateStartSession(request) {
     : success({ sessionId: request.params.id, startTime: startTime.value });
 }
 
+export function validateStartNewSession(request) {
+  const createResult = validateCreateSession(request);
+  const startTime = parseDate(request.body?.startTime, "startTime");
+  const errors = [...(createResult.errors ?? [])];
+  if (startTime.error) errors.push(startTime.error);
+  return errors.length
+    ? failure(...errors)
+    : success({ ...createResult.data, startTime: startTime.value });
+}
+
 export function validateEndSession(request) {
   const idResult = validateSessionId(request);
   const endedAt = parseTimestamp(request.body?.endedAt, "endedAt");
