@@ -54,10 +54,10 @@ test("daily analytics reconcile activities and expose open session count", async
     },
     async findDailySessions() {
       return [{
-        id: "open", status: "active", hourly_rate: 12, started_at: "2026-08-24T16:00:00Z",
+        id: "open", status: "active", hourly_rate: 12, controller_count: 3, started_at: "2026-08-24T16:00:00Z",
         paused_at: null, ended_at: null, total_paused_seconds: 0,
         final_elapsed_seconds: null, final_cost: null,
-        station: { type: "billiard", number: 1 },
+        station: { type: "playstation", number: 1 },
       }];
     },
     async findConcurrencySessions() {
@@ -80,6 +80,7 @@ test("daily analytics reconcile activities and expose open session count", async
   assert.equal(result.traffic.length, 24);
   assert.equal(result.concurrencySessions.length, 1);
   assert.equal(result.concurrencySessions[0].activity, "billiard");
+  assert.equal(result.sessions[0].controllerCount, 3);
   assertReconciles(result, result.traffic);
 });
 

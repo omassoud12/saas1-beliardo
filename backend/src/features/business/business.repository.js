@@ -41,7 +41,7 @@ export function aggregateSessionRows(rows, bucket, timezone) {
 }
 
 const detailFields = `
-  id, status, hourly_rate, started_at, paused_at, ended_at,
+  id, status, hourly_rate, controller_count, started_at, paused_at, ended_at,
   total_paused_seconds, final_elapsed_seconds, final_cost,
   station:stations!inner(id, type, number)
 `;

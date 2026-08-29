@@ -69,6 +69,7 @@ function mapSession(row) {
     activityLabel: activityLabels[station?.type] ?? "Unknown",
     stationNumber: station?.number ?? null,
     hourlyRate: Number(row.hourly_rate || 0),
+    controllerCount: station?.type === "playstation" ? (Number(row.controller_count) || 1) : 1,
     startedAt: row.started_at,
     pausedAt: row.paused_at,
     endedAt: row.ended_at,

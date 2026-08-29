@@ -34,8 +34,8 @@ export function ChartDataTable({ data, unit, currency = "USD", caption }) {
   return <details className="chart-data-details"><summary>View accessible data table</summary><div className="analytics-table-wrap"><table className="chart-data-table"><caption className="sr-only">{caption}</caption><thead><tr><th scope="col">Period</th>{CHART_SERIES.map((series) => <th scope="col" key={series.key}>{series.label}</th>)}<th scope="col">Total</th></tr></thead><tbody>{data.map((row) => <tr key={row.key}><th scope="row">{row.label}{row.isFuture ? " (future)" : ""}</th>{CHART_SERIES.map((series) => <td key={series.key}>{cell(row[series.key], row)}</td>)}<td>{cell(row.total ?? combinedTotal(row), row)}</td></tr>)}</tbody></table></div></details>;
 }
 
-export function AnalyticsChartPanel({ titleId, title, description, eyebrow = "Visual analytics", loading, error, onRetry, hasData, hidden, onToggle, data, unit, currency, summary, legend, emptyMessage, children }) {
-  return <section className="analytics-panel chart-panel" aria-labelledby={titleId} aria-describedby={`${titleId}-description`}>
+export function AnalyticsChartPanel({ titleId, title, description, eyebrow = "Visual analytics", loading, error, onRetry, hasData, hidden, onToggle, data, unit, currency, summary, legend, emptyMessage, className = "", children }) {
+  return <section className={`analytics-panel chart-panel ${className}`.trim()} aria-labelledby={titleId} aria-describedby={`${titleId}-description`}>
     <div className="analytics-panel__heading"><div><p className="eyebrow">{eyebrow}</p><h3 id={titleId}>{title}</h3></div><p id={`${titleId}-description`}>{description}</p></div>
     {!loading && !error && summary}
     {loading ? <ChartSkeleton /> : error ? <ChartErrorState onRetry={onRetry} /> : !hasData ? <ChartEmptyState message={emptyMessage} /> : <>

@@ -7,14 +7,22 @@ import { createReportDocument, escapeHtml } from "../src/features/business/busin
 
 function summary() {
   return {
-    period: { kind: "month", year: 2026, month: 8, timezone: "Asia/Beirut", currency: "USD" },
+    period: { kind: "month", year: 2026, month: 8, businessDate: "2026-08-27", timezone: "Asia/Beirut", currency: "USD" },
     metrics: { trackedDays: 1, sessionCount: 2, totalHours: 1.5, totalSeconds: 5400, revenue: 18 },
     activities: [
       { type: "playstation", label: "PlayStation", sessions: 1, totalSeconds: 3600, hours: 1, revenue: 12 },
       { type: "billiard", label: "Billiard", sessions: 1, totalSeconds: 1800, hours: 0.5, revenue: 6 },
       { type: "pingpong", label: "Ping Pong", sessions: 0, totalSeconds: 0, hours: 0, revenue: 0 },
     ],
-    days: [{ key: "2026-08-01", total: { sessions: 2, totalSeconds: 5400, revenue: 18 }, activities: [] }],
+    days: [{
+      key: "2026-08-01",
+      total: { sessions: 2, totalSeconds: 5400, revenue: 18 },
+      activities: [
+        { type: "playstation", sessions: 1, totalSeconds: 3600, revenue: 12 },
+        { type: "billiard", sessions: 1, totalSeconds: 1800, revenue: 6 },
+        { type: "pingpong", sessions: 0, totalSeconds: 0, revenue: 0 },
+      ],
+    }],
   };
 }
 
@@ -133,6 +141,63 @@ test("report HTML escapes owner content and supports RTL documents", () => {
   assert.match(document.html, /dir="rtl"/);
   assert.doesNotMatch(document.html, /<script>x<\/script>/);
   assert.match(document.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
+});
+
+test("report charts and daily details match the current analytics views", () => {
+  const common = {
+    title: "Aligned report", notes: "", language: "en", business: { name: "Beliardo" },
+    timezone: "Asia/Beirut", generatedAt: new Date("2026-08-27T10:00:00.000Z"),
+    sections: { summary: true, charts: true, categoryBreakdown: true, detailsTable: true },
+  };
+  const monthly = createReportDocument({ ...common, reportType: "monthly", summary: summary() });
+  assert.match(monthly.html, /Revenue by day/);
+  assert.match(monthly.html, /Daily session volume/);
+  assert.match(monthly.html, /#43bfa5/);
+  assert.match(monthly.html, /#e5795c/);
+  assert.match(monthly.html, /#d9a83f/);
+
+  const activities = summary().activities;
+  const daily = createReportDocument({
+    ...common,
+    reportType: "daily",
+    summary: {
+      period: {
+        kind: "day", date: "2026-08-27", businessDate: "2026-08-27", timezone: "Asia/Beirut", currency: "USD",
+        from: "2026-08-27T03:00:00.000Z", to: "2026-08-28T03:00:00.000Z",
+      },
+      metrics: { completedSessions: 1, totalSeconds: 3600, revenue: 12 },
+      activities,
+      traffic: [],
+      concurrencySessions: [{ activity: "playstation", status: "completed", startedAt: "2026-08-27T04:00:00.000Z", endedAt: "2026-08-27T05:00:00.000Z" }],
+      sessions: [{
+        id: "session-1", activity: "playstation", activityLabel: "PlayStation", stationNumber: 4,
+        controllerCount: 3, status: "completed", startedAt: "2026-08-27T04:00:00.000Z",
+        endedAt: "2026-08-27T05:00:00.000Z", durationSeconds: 3600, revenue: 12,
+      }],
+    },
+  });
+  assert.match(daily.html, /Active sessions by hour/);
+  assert.match(daily.html, /Business day 06:00–06:00/);
+  assert.match(daily.html, /Controllers/);
+  assert.match(daily.html, /<td>3<\/td>/);
+
+  const yearly = createReportDocument({
+    ...common,
+    reportType: "yearly",
+    summary: {
+      period: { kind: "year", year: 2026, businessDate: "2026-08-27", timezone: "Asia/Beirut", currency: "USD" },
+      metrics: { sessionCount: 2, totalSeconds: 5400, revenue: 18 },
+      activities,
+      months: Array.from({ length: 12 }, (_, index) => ({
+        key: `2026-${String(index + 1).padStart(2, "0")}`,
+        total: index === 0 ? { sessions: 2, totalSeconds: 5400, revenue: 18 } : { sessions: 0, totalSeconds: 0, revenue: 0 },
+        activities: index === 0 ? summary().days[0].activities : [],
+      })),
+    },
+  });
+  assert.match(yearly.html, /Monthly revenue by activity/);
+  assert.match(yearly.html, /stacked-chart/);
+  assert.match(yearly.html, /future-mark/);
 });
 
 test("PDF renderer closes its page and browser after success and failure", async () => {
