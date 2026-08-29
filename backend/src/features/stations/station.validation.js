@@ -1,10 +1,13 @@
 const types = new Set(["billiard", "pingpong", "playstation"]);
 const statuses = new Set(["available", "active", "paused"]);
-const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Station IDs predate the UUID-only frontend and are stored as text in the
+// database. Keep accepting those existing IDs when the complete station list
+// is synchronized, otherwise any edit or deletion is rejected with a 400.
+const stationIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 function normalizeStation(station) {
   if (
-    !station || typeof station.id !== "string" || !uuidPattern.test(station.id) ||
+    !station || typeof station.id !== "string" || !stationIdPattern.test(station.id) ||
     !types.has(station.type) || !Number.isInteger(Number(station.number)) ||
     Number(station.number) < 1 || Number(station.number) > 999 ||
     !Number.isFinite(Number(station.hourlyRate)) || Number(station.hourlyRate) < 0 ||

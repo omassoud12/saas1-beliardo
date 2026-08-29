@@ -72,7 +72,7 @@ function AccessRouter({ session, onSignOut }) {
 }
 
 function AuthenticatedApp({ onSignOut, access }) {
-  const [stations, setStations, stationsHydrated] = usePersistentStations({ businessId: access.tenant.id, canManage: access.permissions.manageStations });
+  const [stations, setStations, stationsHydrated, stationSyncError] = usePersistentStations({ businessId: access.tenant.id, canManage: access.permissions.manageStations });
   const [view, setView] = useState("home");
   const [selectedStationId, setSelectedStationId] = useState(null);
   const [stationForm, setStationForm] = useState(null);
@@ -111,6 +111,12 @@ function AuthenticatedApp({ onSignOut, access }) {
   }, []);
 
   useEffect(() => () => window.clearTimeout(noticeTimeoutRef.current), []);
+
+  useEffect(() => {
+    if (!stationSyncError) return;
+    const details = Array.isArray(stationSyncError.details) ? stationSyncError.details.join(" · ") : "";
+    showNotice(details || stationSyncError.message || "Unable to save station changes");
+  }, [showNotice, stationSyncError]);
 
   useEffect(() => {
     let cancelled = false;
@@ -174,6 +180,10 @@ function AuthenticatedApp({ onSignOut, access }) {
 
   const handleDeleteStation = useCallback((stationId) => {
     const station = stations.find((item) => item.id === stationId);
+    if (station && ["active", "paused"].includes(station.status)) {
+      showNotice("End or cancel the live session before deleting this station");
+      return;
+    }
     setStations((currentStations) => currentStations.filter((item) => item.id !== stationId));
     if (selectedStationId === stationId) setSelectedStationId(null);
     showNotice(`${station ? getStationName(station) : "Station"} deleted`);

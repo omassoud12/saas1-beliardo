@@ -29,6 +29,7 @@ export const stationRepository = {
       .select(stationFields)
       .eq("business_id", businessId)
       .eq("id", stationId)
+      .is("archived_at", null)
       .maybeSingle();
     throwDatabaseError(error);
     return mapStation(data);
@@ -51,6 +52,7 @@ export const stationRepository = {
       .from("stations")
       .select(stationFields)
       .eq("business_id", businessId)
+      .is("archived_at", null)
       .order("type")
       .order("number");
     throwDatabaseError(error);
@@ -61,7 +63,8 @@ export const stationRepository = {
     const { data, error } = await getSupabaseAdmin()
       .from("stations")
       .select("id")
-      .eq("business_id", businessId);
+      .eq("business_id", businessId)
+      .is("archived_at", null);
     throwDatabaseError(error);
     return data.map((station) => station.id);
   },
@@ -89,6 +92,7 @@ export const stationRepository = {
       paused_at: station.pausedAt,
       total_paused_ms: station.totalPausedMs,
       planned_start_at: station.plannedStartAt,
+      archived_at: null,
     }));
     const { data, error } = await getSupabaseAdmin()
       .from("stations")
@@ -98,12 +102,13 @@ export const stationRepository = {
     return data.map(mapStation);
   },
 
-  async removeByIds(businessId, stationIds) {
+  async archiveByIds(businessId, stationIds) {
     if (stationIds.length === 0) return;
     const { error } = await getSupabaseAdmin()
       .from("stations")
-      .delete()
+      .update({ archived_at: new Date().toISOString() })
       .eq("business_id", businessId)
+      .is("archived_at", null)
       .in("id", stationIds);
     throwDatabaseError(error);
   },

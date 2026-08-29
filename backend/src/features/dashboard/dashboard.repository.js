@@ -33,7 +33,8 @@ export const dashboardRepository = {
       getSupabaseAdmin()
         .from("stations")
         .select("status", { count: "exact" })
-        .eq("business_id", businessId),
+        .eq("business_id", businessId)
+        .is("archived_at", null),
       getSupabaseAdmin()
         .from("sessions")
         .select("status", { count: "exact" })

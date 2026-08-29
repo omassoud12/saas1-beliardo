@@ -41,7 +41,12 @@ export function StationManager({ stations, onEdit, onDelete }) {
                   ) : (
                     <div className="manager-row__actions">
                       <button type="button" onClick={() => onEdit(station)}>Edit</button>
-                      <button type="button" onClick={() => setConfirmDeleteId(station.id)}>Delete</button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmDeleteId(station.id)}
+                        disabled={["active", "paused"].includes(station.status)}
+                        title={["active", "paused"].includes(station.status) ? "End or cancel the live session first" : undefined}
+                      >Delete</button>
                     </div>
                   )}
                 </article>

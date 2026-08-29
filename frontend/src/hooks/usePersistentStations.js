@@ -41,6 +41,7 @@ export function usePersistentStations({ businessId, canManage = true } = {}) {
   const storageKey = storageKeyFor(businessId);
   const [stations, setStations] = useState(() => loadStations(storageKey));
   const [isHydrated, setIsHydrated] = useState(false);
+  const [syncError, setSyncError] = useState(null);
   const lastSyncedConfigurationRef = useRef(null);
 
   useEffect(() => {
@@ -83,11 +84,17 @@ export function usePersistentStations({ businessId, canManage = true } = {}) {
     if (signature === lastSyncedConfigurationRef.current) return;
     lastSyncedConfigurationRef.current = signature;
 
-    syncStations(stations).catch(() => {
-      if (lastSyncedConfigurationRef.current === signature) lastSyncedConfigurationRef.current = null;
-      // Local state remains usable if the backend is temporarily unavailable.
-    });
+    syncStations(stations)
+      .then(() => {
+        if (lastSyncedConfigurationRef.current === signature) setSyncError(null);
+      })
+      .catch((error) => {
+        if (lastSyncedConfigurationRef.current === signature) {
+          lastSyncedConfigurationRef.current = null;
+          setSyncError(error);
+        }
+      });
   }, [canManage, isHydrated, stations]);
 
-  return [stations, setStations, isHydrated];
+  return [stations, setStations, isHydrated, syncError];
 }
