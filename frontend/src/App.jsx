@@ -355,6 +355,9 @@ function AuthenticatedApp({ onSignOut, access }) {
             selectedStationId={selectedStationId}
             onSelect={setSelectedStationId}
             onManageStations={access.permissions.manageStations ? handleManageStations : null}
+            businessDate={businessDate}
+            finishedToday={finishedToday}
+            timezone={access.tenant.timezone}
           />
         ) : view === "dashboard" && access.permissions.manageStations ? (
           <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading dashboard"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Dashboard

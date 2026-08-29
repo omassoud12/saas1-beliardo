@@ -296,6 +296,49 @@ test("finished count uses the lounge's current calendar day", async () => {
   });
 });
 
+test("Home activity details use the current tenant-local 06:00 business day", async () => {
+  let receivedRange;
+  const sessions = {
+    async findCompleted(_businessId, range) {
+      receivedRange = range;
+      return [{
+        id: "session-1",
+        station: { type: "pingpong", number: 4 },
+        startedAt: "2026-08-26T21:30:00.000Z",
+        finalElapsedSeconds: 5400,
+        finalCost: 15,
+        endedAt: "2026-08-26T23:00:00.000Z",
+        createdBy: "private-user-id",
+      }];
+    },
+  };
+  const service = createSessionService({
+    sessions,
+    stations: {},
+    clock: () => new Date("2026-08-27T02:30:00.000Z"),
+  });
+
+  const activities = await service.getTodayActivities({
+    businessId: "business-1",
+    timezone: "Asia/Beirut",
+  });
+
+  assert.deepEqual(receivedRange, {
+    from: "2026-08-26T03:00:00.000Z",
+    to: "2026-08-27T03:00:00.000Z",
+    limit: 1000,
+  });
+  assert.deepEqual(activities, [{
+    id: "session-1",
+    type: "pingpong",
+    stationNumber: 4,
+    startedAt: "2026-08-26T21:30:00.000Z",
+    finalElapsedSeconds: 5400,
+    finalCost: 15,
+    endedAt: "2026-08-26T23:00:00.000Z",
+  }]);
+});
+
 test("cancelling an active session discards billing and frees the station for a new session", async () => {
   const harness = createHarness();
   const created = await harness.service.create({ businessId: "business-1", userId: "user-1", stationId: "station-1" });

@@ -1,8 +1,18 @@
 import { useMemo } from "react";
 import { STATION_TYPE_ORDER } from "../data/stationTypes";
 import { StationSection } from "../components/stations/StationSection";
+import { ActivityDetails } from "../components/ActivityDetails";
 
-export function Home({ stations, stationsHydrated, selectedStationId, onSelect, onManageStations }) {
+export function Home({
+  stations,
+  stationsHydrated,
+  selectedStationId,
+  onSelect,
+  onManageStations,
+  businessDate,
+  finishedToday,
+  timezone,
+}) {
   const stationsByType = useMemo(() => Object.fromEntries(
     STATION_TYPE_ORDER.map((type) => [type, stations.filter((station) => station.type === type)]),
   ), [stations]);
@@ -25,13 +35,16 @@ export function Home({ stations, stationsHydrated, selectedStationId, onSelect, 
 
   if (stations.length === 0) {
     return (
-      <section className="empty-state empty-state--home">
-        <div className="empty-state__symbol" aria-hidden="true"><span /></div>
-        <p className="eyebrow">Live floor</p>
-        <h2>No stations configured yet</h2>
-        <p>{onManageStations ? "Add your first Billiard, Ping Pong, or PlayStation station from the Dashboard." : "Ask the lounge owner to configure stations."}</p>
-        {onManageStations && <button className="button button--primary" type="button" onClick={onManageStations}>Configure stations</button>}
-      </section>
+      <div className="live-floor">
+        <section className="empty-state empty-state--home">
+          <div className="empty-state__symbol" aria-hidden="true"><span /></div>
+          <p className="eyebrow">Live floor</p>
+          <h2>No stations configured yet</h2>
+          <p>{onManageStations ? "Add your first Billiard, Ping Pong, or PlayStation station from the Dashboard." : "Ask the lounge owner to configure stations."}</p>
+          {onManageStations && <button className="button button--primary" type="button" onClick={onManageStations}>Configure stations</button>}
+        </section>
+        <ActivityDetails currentBusinessDate={businessDate} refreshKey={finishedToday} timezone={timezone} />
+      </div>
     );
   }
 
@@ -58,6 +71,8 @@ export function Home({ stations, stationsHydrated, selectedStationId, onSelect, 
           />
         );
       })}
+
+      <ActivityDetails currentBusinessDate={businessDate} refreshKey={finishedToday} timezone={timezone} />
     </div>
   );
 }

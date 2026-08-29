@@ -111,6 +111,14 @@ export async function fetchActiveSessions() {
   };
 }
 
+export async function fetchTodayActivities() {
+  const payload = await apiRequest("/sessions/activity/today");
+  return {
+    activities: payload.data.activities,
+    businessDate: payload.data.businessDate,
+  };
+}
+
 export async function createSession(stationId, hourlyRate, controllerCount) {
   const payload = await apiRequest("/sessions", {
     method: "POST",

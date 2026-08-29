@@ -4,7 +4,7 @@ import { requireApprovedOwner, requireHomeAccess } from "../../middleware/access
 import { validateRequest } from "../../middleware/validateRequest.js";
 import {
   cancelSession, createSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
-  getSession, pauseSession, resumeSession, startNewSession, startSession, updateSession,
+  getSession, getTodayActivities, pauseSession, resumeSession, startNewSession, startSession, updateSession,
 } from "./session.controller.js";
 import {
   validateCompletedSessions, validateCreateSession, validateEndSession, validatePauseSession, validateSessionId,
@@ -18,6 +18,7 @@ router.use(requireHomeAccess);
 router.post("/", validateRequest(validateCreateSession), createSession);
 router.post("/start", validateRequest(validateStartNewSession), startNewSession);
 router.get("/active", getActiveSessions);
+router.get("/activity/today", getTodayActivities);
 router.get("/completed", requireApprovedOwner, validateRequest(validateCompletedSessions), getCompletedSessions);
 router.get("/:id", validateRequest(validateSessionId), getSession);
 router.post("/:id/start", validateRequest(validateStartSession), startSession);

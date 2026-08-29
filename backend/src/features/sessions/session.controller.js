@@ -37,6 +37,23 @@ export async function getActiveSessions(request, response, next) {
   } catch (error) { return next(error); }
 }
 
+export async function getTodayActivities(request, response, next) {
+  try {
+    const now = new Date();
+    const activities = await sessionService.getTodayActivities({
+      businessId: request.auth.businessId,
+      timezone: request.auth.timezone,
+      at: now,
+    });
+    return sendSuccess(response, {
+      data: {
+        activities,
+        businessDate: getBusinessDateKey(now, request.auth.timezone),
+      },
+    });
+  } catch (error) { return next(error); }
+}
+
 export async function startNewSession(request, response, next) {
   try {
     const session = await sessionService.startNew({

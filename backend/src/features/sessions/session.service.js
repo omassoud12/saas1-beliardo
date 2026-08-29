@@ -145,6 +145,20 @@ export function createSessionService({
       return sessions.countCompleted(businessId, getPeriodRange("today", timezone, at));
     },
 
+    async getTodayActivities({ businessId, timezone, at = clock() }) {
+      const range = getPeriodRange("today", timezone, at);
+      const completed = await sessions.findCompleted(businessId, { ...range, limit: 1000 });
+      return completed.map((session) => ({
+        id: session.id,
+        type: session.station?.type ?? null,
+        stationNumber: session.station?.number ?? null,
+        startedAt: session.startedAt,
+        finalElapsedSeconds: session.finalElapsedSeconds,
+        finalCost: session.finalCost,
+        endedAt: session.endedAt,
+      }));
+    },
+
     async getCompleted({ businessId, timezone, filters }) {
       const range = normalizeBusinessRange(filters, timezone);
       if (range.from && range.to && range.from >= range.to) {
