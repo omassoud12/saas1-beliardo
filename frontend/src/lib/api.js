@@ -194,8 +194,8 @@ export async function acceptEmployeeInvitation(token) {
   return payload.data.membership;
 }
 
-export async function completePasswordSetup() {
-  await apiRequest("/access/password-configured", { method: "POST", body: "{}" });
+export async function completePasswordSetup(password) {
+  await apiRequest("/access/password", { method: "POST", body: JSON.stringify({ password }) });
 }
 
 export async function fetchEmployees() {

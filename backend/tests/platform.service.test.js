@@ -8,16 +8,21 @@ function repository(overrides = {}) {
     async findOwnerMembership(userId) { return { user_id: userId, business_id: "business-1", role: "owner", status: "active" }; },
     async findMembership(userId) { return { user_id: userId, business_id: "business-1", role: "owner", status: "active" }; },
     async updateProfile() {}, async updateBusiness() {}, async updateMembership() {}, async audit() {},
+    async transitionUser(actorUserId, userId, action) {
+      if (actorUserId === userId) return { outcome: "self_change_denied" };
+      return { outcome: "updated", account_status: action === "approve" ? "approved" : action === "suspend" ? "suspended" : "approved" };
+    },
+    async setAuthBan() {},
     async listManagedProfiles() { return []; }, async listMemberships() { return []; }, async listBusinesses() { return []; },
     ...overrides,
   };
 }
 
-test("approving an owner activates profile, tenant, and membership", async () => {
+test("approving an owner uses one atomic transition", async () => {
   const writes = [];
-  const service = createPlatformService({ repository: repository({ async updateProfile(_id, values) { writes.push(["profile", values.account_status]); }, async updateBusiness(_id, values) { writes.push(["business", values.status]); }, async updateMembership(_id, _business, values) { writes.push(["membership", values.status]); } }) });
+  const service = createPlatformService({ repository: repository({ async transitionUser(actor, user, action) { writes.push([actor, user, action]); return { outcome: "updated", account_status: "approved" }; } }) });
   await service.changeOwnerStatus({ actorUserId: "admin-1", userId: "owner-1", action: "approve" });
-  assert.deepEqual(writes, [["profile", "approved"], ["business", "approved"], ["membership", "active"]]);
+  assert.deepEqual(writes, [["admin-1", "owner-1", "approve"]]);
 });
 
 test("platform administrator cannot suspend itself through managed-user API", async () => {
@@ -27,7 +32,7 @@ test("platform administrator cannot suspend itself through managed-user API", as
 
 test("employee suspension disables both profile and tenant membership", async () => {
   const writes = [];
-  const service = createPlatformService({ repository: repository({ async findProfile(id) { return { id, account_type: "employee", account_status: "approved" }; }, async findMembership(id) { return { user_id: id, business_id: "business-2", role: "employee" }; }, async updateProfile(_id, values) { writes.push(values.account_status); }, async updateMembership(_id, _business, values) { writes.push(values.status); } }) });
+  const service = createPlatformService({ repository: repository({ async transitionUser(actor, user, action) { writes.push([actor, user, action]); return { outcome: "updated", account_status: "suspended" }; } }) });
   await service.changeUserStatus({ actorUserId: "admin-1", userId: "employee-1", action: "suspend" });
-  assert.deepEqual(writes, ["suspended", "disabled"]);
+  assert.deepEqual(writes, [["admin-1", "employee-1", "suspend"]]);
 });

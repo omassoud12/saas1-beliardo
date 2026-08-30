@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createShutdownHandler } from "../src/serverLifecycle.js";
 
-test("graceful shutdown drains once and exits cleanly", () => {
+test("graceful shutdown drains once and exits cleanly", async () => {
   const events = [];
   const timer = { unref() { events.push("unref"); } };
   const shutdown = createShutdownHandler({
@@ -15,6 +15,7 @@ test("graceful shutdown drains once and exits cleanly", () => {
 
   shutdown("SIGTERM");
   shutdown("SIGTERM");
+  await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(events, [
     "Received SIGTERM; draining active requests",
     "unref",

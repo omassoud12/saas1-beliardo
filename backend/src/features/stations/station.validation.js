@@ -1,5 +1,4 @@
 const types = new Set(["billiard", "pingpong", "playstation"]);
-const statuses = new Set(["available", "active", "paused"]);
 // Station IDs predate the UUID-only frontend and are stored as text in the
 // database. Keep accepting those existing IDs when the complete station list
 // is synchronized, otherwise any edit or deletion is rejected with a 400.
@@ -11,7 +10,7 @@ function normalizeStation(station) {
     !types.has(station.type) || !Number.isInteger(Number(station.number)) ||
     Number(station.number) < 1 || Number(station.number) > 999 ||
     !Number.isFinite(Number(station.hourlyRate)) || Number(station.hourlyRate) < 0 ||
-    Number(station.hourlyRate) > 999 || !statuses.has(station.status)
+    Number(station.hourlyRate) > 999
   ) return null;
 
   return {
@@ -19,17 +18,15 @@ function normalizeStation(station) {
     type: station.type,
     number: Number(station.number),
     hourlyRate: Number(station.hourlyRate),
-    status: station.status,
-    sessionStartAt: station.sessionStartAt ?? null,
-    pausedAt: station.pausedAt ?? null,
-    totalPausedMs: Math.max(0, Number(station.totalPausedMs) || 0),
-    plannedStartAt: station.plannedStartAt ?? null,
   };
 }
 
 export function validateStationSync(request) {
   if (!Array.isArray(request.body?.stations)) {
     return { success: false, errors: ["stations must be an array"] };
+  }
+  if (request.body.stations.length > 300) {
+    return { success: false, errors: ["stations cannot contain more than 300 items"] };
   }
   const stations = request.body.stations.map(normalizeStation);
   if (stations.some((station) => !station)) {

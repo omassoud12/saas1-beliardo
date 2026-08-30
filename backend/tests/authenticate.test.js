@@ -33,8 +33,10 @@ test("authentication derives role and tenant only from verified database members
 });
 
 test("a caller cannot select a tenant without membership", async () => {
-  const client = clientWithAccess({ memberships: [{ user_id: "user-1", business_id: "business-a", role: "owner", status: "active", businesses: { id: "business-a", timezone: "UTC", status: "approved" } }] });
-  const request = { headers: { authorization: "Bearer valid-token", "x-business-id": "business-b" } };
+  const tenantA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const tenantB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const client = clientWithAccess({ memberships: [{ user_id: "user-1", business_id: tenantA, role: "owner", status: "active", businesses: { id: tenantA, timezone: "UTC", status: "approved" } }] });
+  const request = { headers: { authorization: "Bearer valid-token", "x-business-id": tenantB } };
   await run(createAuthenticate({ getAdminClient: () => client }), request);
   assert.equal(request.auth.businessId, null);
   assert.equal((await run(requireApprovedOwner, request)).statusCode, 403);

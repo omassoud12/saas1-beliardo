@@ -1,4 +1,5 @@
 import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
+import { getSupabaseDataClient } from "../../middleware/requestContext.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 
 const stationFields = `
@@ -23,8 +24,22 @@ export function mapStation(row) {
 }
 
 export const stationRepository = {
+  async sync(businessId, actorUserId, stations) {
+    const { data, error } = await getSupabaseAdmin().rpc("sync_stations_atomic", {
+      p_business_id: businessId,
+      p_actor_user_id: actorUserId,
+      p_stations: stations,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "conflict", station_records: null };
+    return {
+      outcome: result.outcome,
+      stations: Array.isArray(result.station_records) ? result.station_records.map(mapStation) : [],
+    };
+  },
+
   async findById(businessId, stationId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("stations")
       .select(stationFields)
       .eq("business_id", businessId)
@@ -36,7 +51,7 @@ export const stationRepository = {
   },
 
   async updateStatus(businessId, stationId, status) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("stations")
       .update({ status })
       .eq("business_id", businessId)
@@ -48,7 +63,7 @@ export const stationRepository = {
   },
 
   async list(businessId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("stations")
       .select(stationFields)
       .eq("business_id", businessId)
@@ -59,57 +74,4 @@ export const stationRepository = {
     return data.map(mapStation);
   },
 
-  async listIds(businessId) {
-    const { data, error } = await getSupabaseAdmin()
-      .from("stations")
-      .select("id")
-      .eq("business_id", businessId)
-      .is("archived_at", null);
-    throwDatabaseError(error);
-    return data.map((station) => station.id);
-  },
-
-  async findOwnedIds(stationIds) {
-    if (stationIds.length === 0) return [];
-    const { data, error } = await getSupabaseAdmin()
-      .from("stations")
-      .select("id, business_id")
-      .in("id", stationIds);
-    throwDatabaseError(error);
-    return data;
-  },
-
-  async upsert(businessId, stations) {
-    if (stations.length === 0) return [];
-    const rows = stations.map((station) => ({
-      id: station.id,
-      business_id: businessId,
-      type: station.type,
-      number: station.number,
-      hourly_rate: station.hourlyRate,
-      status: station.status,
-      session_start_at: station.sessionStartAt,
-      paused_at: station.pausedAt,
-      total_paused_ms: station.totalPausedMs,
-      planned_start_at: station.plannedStartAt,
-      archived_at: null,
-    }));
-    const { data, error } = await getSupabaseAdmin()
-      .from("stations")
-      .upsert(rows, { onConflict: "id" })
-      .select(stationFields);
-    throwDatabaseError(error);
-    return data.map(mapStation);
-  },
-
-  async archiveByIds(businessId, stationIds) {
-    if (stationIds.length === 0) return;
-    const { error } = await getSupabaseAdmin()
-      .from("stations")
-      .update({ archived_at: new Date().toISOString() })
-      .eq("business_id", businessId)
-      .is("archived_at", null)
-      .in("id", stationIds);
-    throwDatabaseError(error);
-  },
 };

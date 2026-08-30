@@ -79,7 +79,11 @@ export async function getCompletedSessions(request, response, next) {
 function action(method, message) {
   return async (request, response, next) => {
     try {
-      const session = await sessionService[method]({ businessId: request.auth.businessId, ...request.validated });
+      const session = await sessionService[method]({
+        businessId: request.auth.businessId,
+        userId: request.auth.user.id,
+        ...request.validated,
+      });
       return sendSuccess(response, { data: { session }, message });
     } catch (error) { return next(error); }
   };

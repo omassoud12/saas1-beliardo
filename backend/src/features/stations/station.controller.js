@@ -10,7 +10,11 @@ export async function listStations(request, response, next) {
 
 export async function syncStations(request, response, next) {
   try {
-    const stations = await stationService.sync(request.auth.businessId, request.validated.stations);
+    const stations = await stationService.sync(
+      request.auth.businessId,
+      request.auth.user.id,
+      request.validated.stations,
+    );
     return sendSuccess(response, { data: { stations }, message: "Stations synchronized" });
   } catch (error) { return next(error); }
 }

@@ -79,9 +79,36 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
     },
     async update(_businessId, id, values) {
       const record = records.get(id);
-      for (const [key, value] of Object.entries(values)) record[mapFields[key] ?? key] = value;
+      const { actorUserId, ...updates } = values;
+      for (const [key, value] of Object.entries(updates)) record[mapFields[key] ?? key] = value;
       record.updatedAt = now.toISOString();
-      return { ...record };
+      return actorUserId === undefined && values.status === "active"
+        ? { ...record }
+        : { outcome: "updated", session: { ...record } };
+    },
+    async pause(_businessId, id, _userId, pausedAt) {
+      const record = records.get(id);
+      if (!record) return { outcome: "not_found", session: null };
+      if (record.status !== "active") return { outcome: "invalid_state", session: { ...record } };
+      record.status = "paused";
+      record.pausedAt = pausedAt;
+      record.pauseIntervals = [...record.pauseIntervals, { startedAt: pausedAt, endedAt: null }];
+      record.updatedAt = now.toISOString();
+      return { outcome: "paused", session: { ...record } };
+    },
+    async resume(_businessId, id, _userId, resumedAt) {
+      const record = records.get(id);
+      if (!record) return { outcome: "not_found", session: null };
+      if (record.status !== "paused") return { outcome: "invalid_state", session: { ...record } };
+      const elapsed = Math.max(0, Math.floor((new Date(resumedAt) - new Date(record.pausedAt)) / 1000));
+      record.status = "active";
+      record.totalPausedSeconds += elapsed;
+      record.pauseIntervals = record.pauseIntervals.map((interval, index) => (
+        index === record.pauseIntervals.length - 1 ? { ...interval, endedAt: resumedAt } : interval
+      ));
+      record.pausedAt = null;
+      record.updatedAt = now.toISOString();
+      return { outcome: "resumed", session: { ...record } };
     },
     async complete(values) {
       if (endFailure) throw endFailure;

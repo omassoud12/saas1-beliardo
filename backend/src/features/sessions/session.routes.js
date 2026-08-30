@@ -3,30 +3,29 @@ import { authenticate } from "../../middleware/authenticate.js";
 import { requireApprovedOwner, requireHomeAccess } from "../../middleware/accessGuards.js";
 import { validateRequest } from "../../middleware/validateRequest.js";
 import {
-  cancelSession, createSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
-  getSession, getTodayActivities, pauseSession, resumeSession, startNewSession, startSession, updateSession,
+  cancelSession, deleteSession, endSession, getActiveSessions, getCompletedSessions,
+  getSession, getTodayActivities, pauseSession, resumeSession, startNewSession, updateSession,
 } from "./session.controller.js";
 import {
-  validateCompletedSessions, validateCreateSession, validateEndSession, validatePauseSession, validateSessionId,
-  validateStartNewSession, validateStartSession, validateUpdateSession,
+  validateCompletedSessions, validateEndSession, validatePauseSession, validateSessionId,
+  validateStartNewSession, validateUpdateSession,
 } from "./session.validation.js";
+import { sessionMutationRateLimiter } from "../../middleware/security.js";
 
 const router = Router();
 router.use(authenticate);
 router.use(requireHomeAccess);
 
-router.post("/", validateRequest(validateCreateSession), createSession);
-router.post("/start", validateRequest(validateStartNewSession), startNewSession);
+router.post("/start", sessionMutationRateLimiter, validateRequest(validateStartNewSession), startNewSession);
 router.get("/active", getActiveSessions);
 router.get("/activity/today", getTodayActivities);
 router.get("/completed", requireApprovedOwner, validateRequest(validateCompletedSessions), getCompletedSessions);
 router.get("/:id", validateRequest(validateSessionId), getSession);
-router.post("/:id/start", validateRequest(validateStartSession), startSession);
-router.post("/:id/pause", validateRequest(validatePauseSession), pauseSession);
-router.post("/:id/resume", validateRequest(validateSessionId), resumeSession);
-router.patch("/:id", validateRequest(validateUpdateSession), updateSession);
-router.post("/:id/cancel", validateRequest(validateSessionId), cancelSession);
-router.post("/:id/end", validateRequest(validateEndSession), endSession);
-router.delete("/:id", validateRequest(validateSessionId), deleteSession);
+router.post("/:id/pause", sessionMutationRateLimiter, validateRequest(validatePauseSession), pauseSession);
+router.post("/:id/resume", sessionMutationRateLimiter, validateRequest(validateSessionId), resumeSession);
+router.patch("/:id", sessionMutationRateLimiter, validateRequest(validateUpdateSession), updateSession);
+router.post("/:id/cancel", sessionMutationRateLimiter, validateRequest(validateSessionId), cancelSession);
+router.post("/:id/end", sessionMutationRateLimiter, validateRequest(validateEndSession), endSession);
+router.delete("/:id", sessionMutationRateLimiter, validateRequest(validateSessionId), deleteSession);
 
 export default router;

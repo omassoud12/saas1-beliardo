@@ -4,7 +4,7 @@ import { AppError } from "../../shared/errors/AppError.js";
 
 const launchOptions = {
   headless: true,
-  args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+  args: ["--disable-dev-shm-usage"],
   timeout: 30_000,
 };
 

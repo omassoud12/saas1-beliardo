@@ -1,3 +1,5 @@
+import { AuthBrand, AuthPageLayout } from "./AuthPageLayout";
+
 const copy = {
   pending_email: ["Confirm your email", "Open the confirmation email from Supabase, then sign in again."],
   pending_approval: ["Approval pending", "Your lounge was created and is waiting for platform administrator approval."],
@@ -10,5 +12,11 @@ const copy = {
 
 export function AccountState({ state, onSignOut, error }) {
   const [title, text] = copy[state] ?? ["Access unavailable", error || "This account is not authorized."];
-  return <main className="auth-page"><section className="auth-card auth-card--message"><span className="auth-alert">!</span><h1>{title}</h1><p>{error || text}</p><button className="button button--primary button--wide" type="button" onClick={onSignOut}>Sign out</button></section></main>;
+  return <AuthPageLayout><section className="auth-card auth-card--message"><AuthBrand /><span className="auth-alert">!</span><h1>{title}</h1><p>{error || text}</p>
+    {state === "suspended" && <div className="auth-support-note"><strong>Your subscription may have expired.</strong><span>Contact our support team to review your account and restore access.</span></div>}
+    <div className="auth-account-actions">
+      {state === "suspended" && <a className="public-button public-button--primary public-button--large" href="/contact">Contact support</a>}
+      <button className={`public-button public-button--large auth-submit${state === "suspended" ? " public-button--secondary" : " public-button--primary"}`} type="button" onClick={onSignOut}>Sign out</button>
+    </div>
+  </section></AuthPageLayout>;
 }

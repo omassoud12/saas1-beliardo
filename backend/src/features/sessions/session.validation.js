@@ -140,5 +140,8 @@ export function validateCompletedSessions(request) {
   if (to.error) errors.push(to.error);
   if (!Number.isInteger(limit) || limit < 1 || limit > 100) errors.push("limit must be between 1 and 100");
   if (from.value && to.value && new Date(from.value).getTime() >= new Date(to.value).getTime()) errors.push("from must be before to");
+  if (from.value && to.value && new Date(to.value).getTime() - new Date(from.value).getTime() > 366 * 86_400_000) {
+    errors.push("completed session range cannot exceed 366 days");
+  }
   return errors.length ? failure(...errors) : success({ from: from.value, to: to.value, limit });
 }

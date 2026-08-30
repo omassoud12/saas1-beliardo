@@ -1,6 +1,7 @@
 import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
 import { OPEN_SESSION_STATUSES } from "../../shared/constants/session.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
+import { getSupabaseDataClient } from "../../middleware/requestContext.js";
 
 export function mapSession(row) {
   if (!row) return null;
@@ -56,7 +57,7 @@ export const sessionRepository = {
   },
 
   async create(values) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("sessions")
       .insert({
         business_id: values.businessId,
@@ -73,7 +74,7 @@ export const sessionRepository = {
   },
 
   async findById(businessId, sessionId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("sessions")
       .select(selectFields)
       .eq("business_id", businessId)
@@ -84,7 +85,7 @@ export const sessionRepository = {
   },
 
   async findOpenByStation(businessId, stationId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("sessions")
       .select(selectFields)
       .eq("business_id", businessId)
@@ -96,7 +97,7 @@ export const sessionRepository = {
   },
 
   async findActive(businessId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("sessions")
       .select(selectFields)
       .eq("business_id", businessId)
@@ -107,7 +108,7 @@ export const sessionRepository = {
   },
 
   async countCompleted(businessId, { from, to }) {
-    let query = getSupabaseAdmin()
+    let query = getSupabaseDataClient()
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("business_id", businessId)
@@ -120,7 +121,7 @@ export const sessionRepository = {
   },
 
   async findCompleted(businessId, { from, to, limit = 50 }) {
-    let query = getSupabaseAdmin()
+    let query = getSupabaseDataClient()
       .from("sessions")
       .select(selectFields)
       .eq("business_id", businessId)
@@ -137,15 +138,41 @@ export const sessionRepository = {
   },
 
   async update(businessId, sessionId, values) {
-    const { data, error } = await getSupabaseAdmin()
-      .from("sessions")
-      .update(values)
-      .eq("business_id", businessId)
-      .eq("id", sessionId)
-      .select(selectFields)
-      .single();
+    const { data, error } = await getSupabaseAdmin().rpc("update_open_session_atomic", {
+      p_business_id: businessId,
+      p_session_id: sessionId,
+      p_actor_user_id: values.actorUserId,
+      p_hourly_rate: values.hourly_rate ?? null,
+      p_controller_count: values.controller_count ?? null,
+      p_started_at: values.started_at ?? null,
+    });
     throwDatabaseError(error);
-    return mapSession(data);
+    const result = data?.[0] ?? { outcome: "not_found", session_record: null };
+    return { outcome: result.outcome, session: mapSession(result.session_record) };
+  },
+
+  async pause(businessId, sessionId, actorUserId, pausedAt) {
+    const { data, error } = await getSupabaseAdmin().rpc("pause_session_atomic", {
+      p_business_id: businessId,
+      p_session_id: sessionId,
+      p_actor_user_id: actorUserId,
+      p_paused_at: pausedAt,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "not_found", session_record: null };
+    return { outcome: result.outcome, session: mapSession(result.session_record) };
+  },
+
+  async resume(businessId, sessionId, actorUserId, resumedAt) {
+    const { data, error } = await getSupabaseAdmin().rpc("resume_session_atomic", {
+      p_business_id: businessId,
+      p_session_id: sessionId,
+      p_actor_user_id: actorUserId,
+      p_resumed_at: resumedAt,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "not_found", session_record: null };
+    return { outcome: result.outcome, session: mapSession(result.session_record) };
   },
 
   async cancel(businessId, sessionId, cancelledBy) {
@@ -182,12 +209,13 @@ export const sessionRepository = {
     };
   },
 
-  async remove(businessId, sessionId) {
-    const { error } = await getSupabaseAdmin()
-      .from("sessions")
-      .delete()
-      .eq("business_id", businessId)
-      .eq("id", sessionId);
+  async remove(businessId, sessionId, actorUserId) {
+    const { data, error } = await getSupabaseAdmin().rpc("delete_draft_session_atomic", {
+      p_business_id: businessId,
+      p_session_id: sessionId,
+      p_actor_user_id: actorUserId,
+    });
     throwDatabaseError(error);
+    return data;
   },
 };

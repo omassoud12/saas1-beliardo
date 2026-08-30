@@ -12,6 +12,8 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { notFound } from "./middleware/notFound.js";
 import { apiRateLimiter, securityHeaders } from "./middleware/security.js";
 import { getTrustProxyHops } from "./config/env.js";
+import { requestContext } from "./middleware/requestContext.js";
+import { requestId } from "./middleware/requestId.js";
 
 export function createApp() {
   const app = express();
@@ -19,6 +21,8 @@ export function createApp() {
   app.disable("x-powered-by");
   app.use(securityHeaders);
   app.use(cors);
+  app.use(requestId);
+  app.use(requestContext);
   app.use(apiRateLimiter);
   app.use(express.json({ limit: "256kb" }));
   app.use("/api/health", healthRoutes);

@@ -195,7 +195,7 @@ export function createSessionService({
       return present(updated);
     },
 
-    async pause({ businessId, sessionId, pausedAt }) {
+    async pause({ businessId, sessionId, userId, pausedAt }) {
       const session = await requireSession(businessId, sessionId);
       if (session.status !== SESSION_STATUS.ACTIVE) {
         throw new AppError(409, "Only an active session can be paused", "INVALID_SESSION_TRANSITION");
@@ -213,37 +213,25 @@ export function createSessionService({
       if (selectedPauseMs > now.getTime()) {
         throw new AppError(400, "pausedAt cannot be in the future", "INVALID_PAUSE_TIME");
       }
-      const updated = await sessions.update(businessId, sessionId, {
-        status: SESSION_STATUS.PAUSED,
-        paused_at: selectedPause.toISOString(),
-      });
-      await stations.updateStatus(businessId, session.stationId, "paused");
-      return present(updated);
+      const result = await sessions.pause(businessId, sessionId, userId, selectedPause.toISOString());
+      if (result.outcome === "forbidden") throw new AppError(403, "Session pause is not permitted", "FORBIDDEN");
+      if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (result.outcome === "invalid_time") throw new AppError(400, "pausedAt is invalid", "INVALID_PAUSE_TIME");
+      if (result.outcome !== "paused" || !result.session) throw new AppError(409, "Only an active session can be paused", "INVALID_SESSION_TRANSITION");
+      return present(result.session);
     },
 
-    async resume({ businessId, sessionId }) {
-      const session = await requireSession(businessId, sessionId);
-      if (session.status !== SESSION_STATUS.PAUSED) {
-        throw new AppError(409, "Only a paused session can be resumed", "INVALID_SESSION_TRANSITION");
-      }
+    async resume({ businessId, sessionId, userId }) {
       const now = clock();
-      const pausedDuration = Math.max(0, Math.floor(
-        (now.getTime() - new Date(session.pausedAt).getTime()) / 1000,
-      ));
-      const updated = await sessions.update(businessId, sessionId, {
-        status: SESSION_STATUS.ACTIVE,
-        paused_at: null,
-        total_paused_seconds: session.totalPausedSeconds + pausedDuration,
-        pause_intervals: [
-          ...(session.pauseIntervals ?? []),
-          { startedAt: session.pausedAt, endedAt: now.toISOString() },
-        ],
-      });
-      await stations.updateStatus(businessId, session.stationId, "active");
-      return present(updated);
+      const result = await sessions.resume(businessId, sessionId, userId, now.toISOString());
+      if (result.outcome === "forbidden") throw new AppError(403, "Session resume is not permitted", "FORBIDDEN");
+      if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (result.outcome === "invalid_time") throw new AppError(400, "Resume time is invalid", "INVALID_RESUME_TIME");
+      if (result.outcome !== "resumed" || !result.session) throw new AppError(409, "Only a paused session can be resumed", "INVALID_SESSION_TRANSITION");
+      return present(result.session);
     },
 
-    async update({ businessId, sessionId, hourlyRate, controllerCount, startTime }) {
+    async update({ businessId, sessionId, userId, hourlyRate, controllerCount, startTime }) {
       const session = await requireSession(businessId, sessionId);
       if ([SESSION_STATUS.COMPLETED, SESSION_STATUS.CANCELLED].includes(session.status)) {
         throw new AppError(409, "Completed or cancelled sessions cannot be edited", "INVALID_SESSION_TRANSITION");
@@ -269,7 +257,12 @@ export function createSessionService({
         }
         values.started_at = start.toISOString();
       }
-      return present(await sessions.update(businessId, sessionId, values));
+      const result = await sessions.update(businessId, sessionId, { ...values, actorUserId: userId });
+      if (result.outcome === "forbidden") throw new AppError(403, "Session update is not permitted", "FORBIDDEN");
+      if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (result.outcome === "station_not_found") throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
+      if (result.outcome !== "updated" || !result.session) throw new AppError(409, "Session cannot be updated", "INVALID_SESSION_TRANSITION");
+      return present(result.session);
     },
 
     async end({ businessId, sessionId, userId, endedAt }) {
@@ -357,7 +350,11 @@ export function createSessionService({
       if (role === "employee" && (session.status !== SESSION_STATUS.DRAFT || session.createdBy !== userId)) {
         throw new AppError(403, "Employees can only remove their own draft sessions", "SESSION_DELETE_FORBIDDEN");
       }
-      await sessions.remove(businessId, sessionId);
+      const outcome = await sessions.remove(businessId, sessionId, userId);
+      if (outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (outcome === "forbidden") throw new AppError(403, "Session deletion is not permitted", "SESSION_DELETE_FORBIDDEN");
+      if (outcome === "completed_history_protected") throw new AppError(409, "Completed sessions are permanent financial history", "COMPLETED_SESSION_PROTECTED");
+      if (outcome !== "deleted") throw new AppError(409, "Unable to delete session", "SESSION_DELETE_FAILED");
     },
   };
 }

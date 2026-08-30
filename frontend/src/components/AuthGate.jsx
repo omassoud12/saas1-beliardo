@@ -1,19 +1,23 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuthSession } from "../hooks/useAuthSession";
 import { supabase } from "../lib/supabase";
 import { getAuthErrorMessage } from "../utils/authErrors";
+import { getPendingInvitation } from "../lib/authLinkState";
+import { AuthBrand, AuthPageLayout } from "./AuthPageLayout";
 
-export function AuthGate({ children }) {
+export function AuthGate({ children, initialMode = "signin", onModeChange }) {
   const { session, loading } = useAuthSession();
-  const [mode, setMode] = useState("signin");
+  const [mode, setMode] = useState(initialMode);
   const [form, setForm] = useState({ email: "", password: "", businessName: "" });
   const [status, setStatus] = useState({ pending: false, error: "", message: "" });
-  const hasInvitation = new URLSearchParams(window.location.search).has("invite");
+  const hasInvitation = Boolean(getPendingInvitation());
+
+  useEffect(() => setMode(initialMode), [initialMode]);
 
   if (!supabase) {
     return <AuthMessage title="Supabase configuration required" text="Add the public Supabase URL and anonymous key to frontend/.env, then restart the app." />;
   }
-  if (loading) return <div className="auth-loading" aria-label="Checking authentication"><span /></div>;
+  if (loading) return <AuthPageLayout><div className="auth-loading" aria-label="Checking authentication"><span /></div></AuthPageLayout>;
   if (session) return children({ session, signOut: () => supabase.auth.signOut() });
 
   const submit = async (event) => {
@@ -52,9 +56,9 @@ export function AuthGate({ children }) {
   };
 
   return (
-    <main className="auth-page">
+    <AuthPageLayout>
       <section className="auth-card" aria-labelledby="auth-title">
-        <div className="auth-brand-mark" aria-hidden="true"><span /><span /><span /></div>
+        <AuthBrand />
         <p className="eyebrow">Lounge management</p>
         <h1 id="auth-title">{mode === "signin" ? "Welcome back" : hasInvitation ? "Join your lounge" : "Create your lounge"}</h1>
         <p>{mode === "signin" ? "Sign in to manage live sessions and business performance." : hasInvitation ? "Create the employee account that matches your invitation email." : "Set up a secure owner account for your lounge."}</p>
@@ -66,17 +70,17 @@ export function AuthGate({ children }) {
           <label><span>Password</span><input type="password" required minLength="8" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} autoComplete={mode === "signin" ? "current-password" : "new-password"} /></label>
           {status.error && <p className="auth-feedback auth-feedback--error" role="alert">{status.error}</p>}
           {status.message && <p className="auth-feedback" role="status">{status.message}</p>}
-          <button className="button button--primary button--wide" type="submit" disabled={status.pending}>{status.pending ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
+          <button className="public-button public-button--primary public-button--large auth-submit" type="submit" disabled={status.pending}>{status.pending ? "Please wait…" : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
         {mode === "signin" && <button className="auth-secondary-action" type="button" disabled={status.pending} onClick={sendPasswordReset}>Forgot password?</button>}
-        <button className="auth-mode-switch" type="button" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setStatus({ pending: false, error: "", message: "" }); }}>
+        <button className="auth-mode-switch" type="button" onClick={() => { const nextMode = mode === "signin" ? "signup" : "signin"; setMode(nextMode); onModeChange?.(nextMode); setStatus({ pending: false, error: "", message: "" }); }}>
           {mode === "signin" ? "New here? Create an account" : "Already have an account? Sign in"}
         </button>
       </section>
-    </main>
+    </AuthPageLayout>
   );
 }
 
 function AuthMessage({ title, text }) {
-  return <main className="auth-page"><section className="auth-card auth-card--message"><span className="auth-alert">!</span><h1>{title}</h1><p>{text}</p></section></main>;
+  return <AuthPageLayout><section className="auth-card auth-card--message"><AuthBrand /><span className="auth-alert">!</span><h1>{title}</h1><p>{text}</p></section></AuthPageLayout>;
 }

@@ -308,37 +308,6 @@ using (
   or (business_id is not null and public.is_approved_owner(business_id))
 );
 
--- Resolve the one-time bootstrap email to its Auth UUID. This email is never
--- used by application authorization after the row is created.
-do $$
-declare
-  platform_user_id uuid;
-begin
-  select id into platform_user_id
-  from auth.users
-  where lower(email) = lower('omarmassoud20012@gmail.com')
-  limit 1;
-
-  if platform_user_id is not null then
-    update public.businesses
-    set status = 'deleted'
-    where id in (
-      select business_id from public.business_members
-      where user_id = platform_user_id and role = 'owner'
-    );
-    update public.business_members
-    set status = 'removed'
-    where user_id = platform_user_id;
-
-    insert into public.platform_admins (user_id, created_by)
-    values (platform_user_id, platform_user_id)
-    on conflict (user_id) do nothing;
-
-    insert into public.profiles (id, email, account_type, account_status)
-    select id, lower(email), 'platform_admin', 'approved'
-    from auth.users where id = platform_user_id
-    on conflict (id) do update
-      set account_type = 'platform_admin', account_status = 'approved';
-  end if;
-end;
-$$;
+-- Platform administrators are intentionally not bootstrapped by email.
+-- Provision the first administrator by an explicitly reviewed Auth UUID using
+-- the procedure documented in backend/supabase/README.md.

@@ -9,8 +9,12 @@ import {
   cancelSession, endSession, fetchActiveSessions, pauseSession, resumeSession, startNewSession,
   updateSession, fetchMyAccess, acceptEmployeeInvitation, completePasswordSetup,
 } from "./lib/api";
+import {
+  clearPendingInvitation, clearPendingPasswordReset, getPendingInvitation, hasPendingPasswordReset,
+} from "./lib/authLinkState";
 import { Home } from "./pages/Home";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
+import { PublicRouter } from "./public/PublicRouter";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
 const Employees = lazy(() => import("./pages/Employees").then((module) => ({ default: module.Employees })));
@@ -20,7 +24,9 @@ const StationForm = lazy(() => import("./components/stations/StationForm").then(
 const BusinessAnalytics = lazy(() => import("./pages/business/BusinessAnalytics").then((module) => ({ default: module.BusinessAnalytics })));
 
 export default function App() {
-  return <AuthGate>{({ session, signOut }) => <AccessRouter session={session} onSignOut={signOut} />}</AuthGate>;
+  return <PublicRouter renderAuth={({ mode, onModeChange }) => (
+    <AuthGate initialMode={mode} onModeChange={onModeChange}>{({ session, signOut }) => <AccessRouter session={session} onSignOut={signOut} />}</AuthGate>
+  )} />;
 }
 
 function AccessRouter({ session, onSignOut }) {
@@ -31,8 +37,7 @@ function AccessRouter({ session, onSignOut }) {
     let mounted = true;
     async function load() {
       try {
-        const params = new URLSearchParams(window.location.search);
-        const token = params.get("invite");
+        const token = getPendingInvitation();
         let passwordReason = window.sessionStorage.getItem(passwordSetupKey) || "";
         if (token) {
           if (invitationAcceptanceRef.current.token !== token) {
@@ -42,16 +47,15 @@ function AccessRouter({ session, onSignOut }) {
             };
           }
           await invitationAcceptanceRef.current.promise;
+          clearPendingInvitation();
           passwordReason = "invite";
           window.sessionStorage.setItem(passwordSetupKey, passwordReason);
-          params.delete("invite");
         }
-        if (params.get("reset_password") === "1") {
+        if (hasPendingPasswordReset()) {
           passwordReason = "reset";
           window.sessionStorage.setItem(passwordSetupKey, passwordReason);
-          params.delete("reset_password");
+          clearPendingPasswordReset();
         }
-        window.history.replaceState({}, "", `${window.location.pathname}${params.size ? `?${params}` : ""}${window.location.hash}`);
         const access = await fetchMyAccess();
         const requiresPassword = Boolean(passwordReason || access.profile.requiresPasswordSetup);
         if (mounted) setResult({ loading: false, access, error: "", needsPassword: requiresPassword, passwordReason: passwordReason || "invite" });
@@ -64,7 +68,7 @@ function AccessRouter({ session, onSignOut }) {
   }, [passwordSetupKey, session.user.id]);
 
   if (result.loading) return <div className="auth-loading" aria-label="Loading account access"><span /></div>;
-  if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={async () => { await completePasswordSetup(); const access = await fetchMyAccess(); window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, access, needsPassword: false })); }} />;
+  if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={async (password) => { await completePasswordSetup(password); const access = await fetchMyAccess(); window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, access, needsPassword: false })); }} />;
   if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
   if (result.access.state === "platform_admin") return <Suspense fallback={<div className="auth-loading" aria-label="Loading platform administration"><span /></div>}><PlatformAdmin onSignOut={onSignOut} /></Suspense>;
   if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;

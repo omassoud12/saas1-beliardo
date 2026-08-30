@@ -1,5 +1,8 @@
 import { getSupabaseAdmin } from "../config/supabaseAdmin.js";
 import { AppError } from "../shared/errors/AppError.js";
+import { setRequestAccessToken } from "./requestContext.js";
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export function createAuthenticate({ getAdminClient = getSupabaseAdmin } = {}) {
   return async function authenticate(request, _response, next) {
@@ -16,6 +19,9 @@ export function createAuthenticate({ getAdminClient = getSupabaseAdmin } = {}) {
       }
 
       const requestedBusinessId = request.headers["x-business-id"];
+      if (requestedBusinessId && !uuidPattern.test(requestedBusinessId)) {
+        throw new AppError(400, "X-Business-Id must be a valid UUID", "INVALID_BUSINESS_ID");
+      }
       const { data: contexts, error: contextError } = await supabase.rpc("get_request_access_context", {
         p_user_id: userId,
         p_business_id: requestedBusinessId || null,
@@ -34,6 +40,7 @@ export function createAuthenticate({ getAdminClient = getSupabaseAdmin } = {}) {
         businessStatus: context.business_status ?? null,
         timezone: context.timezone ?? "UTC",
       };
+      setRequestAccessToken(token);
       return next();
     } catch (error) {
       return next(error);

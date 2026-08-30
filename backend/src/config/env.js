@@ -35,8 +35,9 @@ export function loadEnv(source = process.env) {
   const isProduction = source.NODE_ENV === "production";
   const required = [
     "SUPABASE_URL",
+    "SUPABASE_ANON_KEY",
     "SUPABASE_SERVICE_ROLE_KEY",
-    ...(isProduction ? ["CORS_ORIGIN", "FRONTEND_URL"] : []),
+    ...(isProduction ? ["CORS_ORIGIN", "FRONTEND_URL", "REDIS_URL"] : []),
   ];
   const missing = required.filter((name) => !source[name]);
   if (missing.length > 0) {
@@ -49,7 +50,9 @@ export function loadEnv(source = process.env) {
     frontendUrl: httpUrl(source.FRONTEND_URL ?? "http://localhost:5173", "FRONTEND_URL").origin,
     trustProxyHops: getTrustProxyHops(source),
     supabaseUrl: source.SUPABASE_URL,
+    supabaseAnonKey: source.SUPABASE_ANON_KEY,
     supabaseServiceRoleKey: source.SUPABASE_SERVICE_ROLE_KEY,
+    redisUrl: source.REDIS_URL,
   };
 }
 

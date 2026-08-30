@@ -5,6 +5,7 @@ export function createShutdownHandler({
   logger = console,
   setTimer = setTimeout,
   clearTimer = clearTimeout,
+  cleanup = async () => {},
 } = {}) {
   let shuttingDown = false;
 
@@ -19,15 +20,21 @@ export function createShutdownHandler({
     }, timeoutMs);
     timeout.unref?.();
 
-    server.close((error) => {
+    server.close(async (error) => {
       clearTimer(timeout);
       if (error) {
         logger.error(error);
         exit(1);
         return;
       }
-      logger.log("Server shutdown complete");
-      exit(0);
+      try {
+        await cleanup();
+        logger.log("Server shutdown complete");
+        exit(0);
+      } catch {
+        logger.error("Server cleanup failed");
+        exit(1);
+      }
     });
   };
 }

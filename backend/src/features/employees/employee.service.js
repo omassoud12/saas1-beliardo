@@ -15,6 +15,7 @@ function invitationError(error) {
     INVITATION_EXPIRED: [410, "Invitation has expired", "INVITATION_EXPIRED"],
     INVITATION_EMAIL_MISMATCH: [403, "Sign in with the email address that was invited", "INVITATION_EMAIL_MISMATCH"],
     ACCOUNT_TYPE_CONFLICT: [409, "This account cannot accept an employee invitation", "ACCOUNT_TYPE_CONFLICT"],
+    ACCOUNT_BLOCKED: [403, "This account is blocked by the platform administrator", "ACCOUNT_BLOCKED"],
   };
   const key = Object.keys(known).find((item) => value.includes(item));
   return key ? new AppError(...known[key]) : error;
@@ -69,8 +70,17 @@ export function createEmployeeService({ repository = employeeRepository, env = g
       const invitation = await repository.findInvitation(businessId, invitationId);
       if (!invitation || invitation.status !== "pending") throw new AppError(404, "Pending invitation not found", "INVITATION_NOT_FOUND");
       const token = newToken();
-      const updated = await repository.rotateInvitation(businessId, invitationId, { token_hash: hashToken(token), expires_at: expiresAt() });
-      await deliver(invitation.email, token, frontendOrigin);
+      const newHash = hashToken(token);
+      const updated = await repository.rotateInvitation(businessId, invitationId, { token_hash: newHash, expires_at: expiresAt() });
+      try {
+        await deliver(invitation.email, token, frontendOrigin);
+      } catch (error) {
+        await repository.restoreInvitation(businessId, invitationId, newHash, {
+          token_hash: invitation.token_hash,
+          expires_at: invitation.expires_at,
+        });
+        throw error;
+      }
       await repository.audit({ actor_user_id: actorUserId, business_id: businessId, action: "invitation.resend", metadata: { invitation_id: invitationId } });
       return updated;
     },

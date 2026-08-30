@@ -29,6 +29,9 @@ export function validateChartRequest(request) {
   if (from.error) errors.push(from.error);
   if (to.error) errors.push(to.error);
   if (from.value && to.value && from.value >= to.value) errors.push("from must be before to");
+  if (from.value && to.value && new Date(to.value).getTime() - new Date(from.value).getTime() > 366 * 86_400_000) {
+    errors.push("chart range cannot exceed 366 days");
+  }
   return errors.length
     ? { success: false, errors }
     : { success: true, data: { granularity, from: from.value, to: to.value } };

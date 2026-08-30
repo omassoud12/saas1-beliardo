@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
+import { getSupabaseDataClient } from "../../middleware/requestContext.js";
 import { BUSINESS_DAY_START_HOUR, getBusinessDateKey } from "../../shared/utils/timeRange.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 import { AppError } from "../../shared/errors/AppError.js";
@@ -55,7 +55,7 @@ async function aggregateWithoutRpc(businessId, range, bucket, timezone) {
   const pageSize = 1000;
   const rows = [];
   for (let offset = 0; ; offset += pageSize) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("sessions")
       .select(aggregateFallbackFields)
       .eq("business_id", businessId)
@@ -73,7 +73,7 @@ async function aggregateWithoutRpc(businessId, range, bucket, timezone) {
 
 export const businessRepository = {
   async findBusiness(businessId) {
-    const { data, error } = await getSupabaseAdmin()
+    const { data, error } = await getSupabaseDataClient()
       .from("businesses")
       .select("id, name, timezone")
       .eq("id", businessId)
@@ -83,7 +83,7 @@ export const businessRepository = {
   },
 
   async aggregate(businessId, range, bucket, timezone) {
-    const { data, error } = await getSupabaseAdmin().rpc("get_business_analytics", {
+    const { data, error } = await getSupabaseDataClient().rpc("get_business_analytics", {
       p_business_id: businessId,
       p_from: range.from,
       p_to: range.to,
@@ -99,7 +99,7 @@ export const businessRepository = {
   },
 
   async findDailySessions(businessId, range) {
-    const client = getSupabaseAdmin();
+    const client = getSupabaseDataClient();
     const [completedResult, openResult] = await Promise.all([
       client.from("sessions")
         .select(detailFields)
@@ -126,7 +126,7 @@ export const businessRepository = {
     const pageSize = 1000;
     const rows = [];
     for (let offset = 0; ; offset += pageSize) {
-      const { data, error } = await getSupabaseAdmin()
+      const { data, error } = await getSupabaseDataClient()
         .from("sessions")
         .select(detailFields)
         .eq("business_id", businessId)

@@ -1,4 +1,4 @@
-import { getSupabaseAdmin } from "../../config/supabaseAdmin.js";
+import { getSupabaseDataClient } from "../../middleware/requestContext.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 
 export const dashboardRepository = {
@@ -8,7 +8,7 @@ export const dashboardRepository = {
     let page = 0;
 
     while (true) {
-      let query = getSupabaseAdmin()
+      let query = getSupabaseDataClient()
         .from("sessions")
         .select("id, station_id, hourly_rate, ended_at, final_elapsed_seconds, final_cost, stations(type)")
         .eq("business_id", businessId)
@@ -30,12 +30,12 @@ export const dashboardRepository = {
 
   async getOperationalCounts(businessId) {
     const [stationsResult, sessionsResult] = await Promise.all([
-      getSupabaseAdmin()
+      getSupabaseDataClient()
         .from("stations")
         .select("status", { count: "exact" })
         .eq("business_id", businessId)
         .is("archived_at", null),
-      getSupabaseAdmin()
+      getSupabaseDataClient()
         .from("sessions")
         .select("status", { count: "exact" })
         .eq("business_id", businessId)

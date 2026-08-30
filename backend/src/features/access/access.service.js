@@ -35,6 +35,7 @@ export function getAccessState(auth) {
   };
 }
 
-export function completePasswordSetup(userId, repository = accessRepository) {
+export async function completePasswordSetup({ userId, accessToken, password }, repository = accessRepository) {
+  await repository.updateAuthPassword(accessToken, password);
   return repository.markPasswordConfigured(userId);
 }
