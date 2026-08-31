@@ -8,7 +8,7 @@ export function ContactPage() {
     description: "Contact UltraScaling Solutions about Lounge Hell product inquiries, support, partnerships, or a product demonstration.",
   });
 
-  return <div className="public-site">
+  return <div className="public-site public-contact-site">
     <PublicNavbar currentPath="/contact" />
     <main className="public-contact">
       <header className="public-contact-hero"><div className="public-container public-contact-hero__content"><p className="public-kicker">Contact UltraScaling Solutions</p><h1>Let’s talk about your lounge.</h1><p>Questions, support, partnerships, or product demos—choose the channel that works best for you.</p></div></header>

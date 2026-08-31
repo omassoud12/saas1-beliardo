@@ -3840,25 +3840,27 @@ button.calendar-day:hover {
   place-items: center;
   padding: 44px 16px;
   background:
-    radial-gradient(circle at 18% 12%, rgba(143, 170, 189, 0.1), transparent 34%),
-    radial-gradient(circle at 85% 90%, rgba(89, 185, 159, 0.06), transparent 30%),
-    linear-gradient(135deg, #121518, #070809 72%);
+    radial-gradient(circle at 18% 10%, rgba(145, 213, 173, 0.1), transparent 32%),
+    linear-gradient(rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.014) 1px, transparent 1px),
+    #0c110f;
+  background-size: auto, 64px 64px, 64px 64px, auto;
 }
 
 .auth-card {
   width: min(100%, 450px);
   padding: 34px;
   border: 1px solid var(--public-border-strong);
-  border-radius: 14px;
-  background: rgba(16, 18, 20, 0.96);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.34);
+  border-radius: 12px;
+  background: rgba(20, 27, 23, 0.97);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.38);
 }
 
 .auth-brand-lockup { display: flex; align-items: center; gap: 12px; margin-bottom: 28px; padding-bottom: 22px; border-bottom: 1px solid var(--public-border); }
 .auth-brand-lockup > span:last-child { display: grid; gap: 3px; text-align: left; }
 .auth-brand-lockup strong { color: var(--public-text); font-size: 0.9rem; }
 .auth-brand-lockup small { color: var(--public-muted); font-size: 0.68rem; }
-.auth-card .eyebrow { margin-bottom: 10px; color: var(--public-muted); font-size: 0.68rem; letter-spacing: 0.08em; }
+.auth-card .eyebrow { margin-bottom: 10px; color: var(--public-green); font-size: 0.68rem; font-weight: 760; letter-spacing: 0.09em; text-transform: uppercase; }
 
 .auth-card h1 {
   margin: 0;
@@ -3895,18 +3897,21 @@ button.calendar-day:hover {
   padding: 0 14px;
   border: 1px solid var(--public-border-strong);
   border-radius: 7px;
-  background: #090b0c;
+  background: #0c110f;
   color: var(--public-text);
   font-size: 0.92rem;
 }
-.auth-card input:hover { border-color: rgba(226, 229, 232, 0.3); }
-.auth-card input:focus { border-color: var(--public-accent); outline: none; box-shadow: 0 0 0 3px rgba(199, 203, 207, 0.08); }
+.auth-card input:hover { border-color: rgba(145, 213, 173, 0.36); }
+.auth-card input:focus { border-color: var(--public-green); outline: none; box-shadow: 0 0 0 3px rgba(145, 213, 173, 0.1); }
+.public-auth-site .public-button--primary { border-color: #91d5ad; background: #91d5ad; color: #0c110f; }
+.public-auth-site .public-button--primary:hover { border-color: #a8dfbd; background: #a8dfbd; }
+.public-auth-site .public-button--secondary:hover { border-color: rgba(145, 213, 173, 0.46); background: rgba(145, 213, 173, 0.06); }
 .auth-submit { width: 100%; margin-top: 3px; }
 .auth-submit:disabled { cursor: wait; opacity: 0.62; }
 
 .auth-feedback {
   margin: 0;
-  color: var(--accent-bright);
+  color: var(--public-green);
   font-size: 0.78rem;
   line-height: 1.45;
 }
