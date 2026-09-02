@@ -1,4 +1,4 @@
-export function Header({ summary, view, onViewChange, onSignOut, permissions }) {
+export function Header({ summary, view, onViewChange, permissions }) {
   const summaryValue = (value) => value === null
     ? <span className="hall-summary__loading" aria-label="Loading">&nbsp;</span>
     : value;
@@ -44,8 +44,6 @@ export function Header({ summary, view, onViewChange, onSignOut, permissions }) 
           Business
         </button>}
       </nav>
-
-      <button className="sign-out-button" type="button" onClick={onSignOut}>Sign out</button>
 
       <dl className="hall-summary" aria-label="Hall status">
         <div>

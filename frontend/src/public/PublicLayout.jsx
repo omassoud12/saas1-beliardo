@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useAuthSession } from "../hooks/useAuthSession";
+import { supabase } from "../lib/supabase";
 import { PUBLIC_BRAND, PUBLIC_ROUTES } from "./brand";
 
 const navigation = [
@@ -15,8 +16,17 @@ export function UltraScalingLogo({ large = false }) {
 
 export function PublicAccountActions({ compact = false }) {
   const { session, loading } = useAuthSession();
+  const [signingOut, setSigningOut] = useState(false);
+  const handleSignOut = async () => {
+    setSigningOut(true);
+    try {
+      await supabase?.auth.signOut();
+    } finally {
+      setSigningOut(false);
+    }
+  };
   if (loading) return <span className={`public-account-loading${compact ? " public-account-loading--compact" : ""}`} aria-label="Checking account session" />;
-  if (session) return <a className="public-button public-button--primary" href={PUBLIC_ROUTES.login}>Open Dashboard</a>;
+  if (session) return <div className="public-account-actions"><a className="public-button public-button--primary" href={PUBLIC_ROUTES.login}>Open Dashboard</a><button className="public-button public-button--secondary" type="button" disabled={signingOut} onClick={handleSignOut}>{signingOut ? "Signing out..." : "Sign out"}</button></div>;
   return <div className="public-account-actions"><a className="public-button public-button--secondary" href={PUBLIC_ROUTES.login}>Login</a><a className="public-button public-button--primary" href={PUBLIC_ROUTES.register}>Create Account</a></div>;
 }
 

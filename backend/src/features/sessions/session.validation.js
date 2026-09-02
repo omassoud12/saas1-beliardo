@@ -94,6 +94,7 @@ export function validateEndSession(request) {
   const endedAt = parseTimestamp(request.body?.endedAt, "endedAt");
   const errors = [...(idResult.errors ?? [])];
   if (endedAt.error) errors.push(endedAt.error);
+  if (endedAt.value === undefined) errors.push("endedAt is required");
   return errors.length
     ? failure(...errors)
     : success({ sessionId: request.params.id, endedAt: endedAt.value });

@@ -33,6 +33,7 @@ export function SessionPanel({
   const panelRef = useRef(null);
   const closeButtonRef = useRef(null);
   const safeActionRef = useRef(null);
+  const endOpeningRef = useRef(false);
   const [confirmationMode, setConfirmationMode] = useState(null);
   const [endTimeInput, setEndTimeInput] = useState("");
   const [endTimeAdjusted, setEndTimeAdjusted] = useState(false);
@@ -123,15 +124,24 @@ export function SessionPanel({
   }, [confirmationMode]);
 
   const openEndConfirmation = async () => {
+    if (endOpeningRef.current) return;
+    endOpeningRef.current = true;
     const stoppedAt = Date.now();
-    setPendingEndAt(stoppedAt);
-    setEndTimeInput(formatZonedTimeInput(stoppedAt, timezone));
-    setEndTimeAdjusted(false);
-    setConfirmationMode("end");
-    const stopped = await onBeginEnd(stoppedAt);
-    if (!stopped) {
-      setConfirmationMode(null);
-      setPendingEndAt(null);
+    try {
+      setPendingEndAt(stoppedAt);
+      setEndTimeInput(formatZonedTimeInput(stoppedAt, timezone));
+      setEndTimeAdjusted(false);
+      setConfirmationMode("end");
+      const pausedAt = await onBeginEnd(stoppedAt);
+      if (!pausedAt) {
+        setConfirmationMode(null);
+        setPendingEndAt(null);
+        return;
+      }
+      setPendingEndAt(pausedAt);
+      setEndTimeInput(formatZonedTimeInput(pausedAt, timezone));
+    } finally {
+      endOpeningRef.current = false;
     }
   };
 

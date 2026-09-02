@@ -78,8 +78,8 @@ export function createSessionService({
   return {
     async startNew({ businessId, userId, stationId, hourlyRate, controllerCount, startTime }) {
       const now = clock();
-      const startedAt = startTime ? new Date(startTime) : now;
-      if (startedAt.getTime() > now.getTime()) {
+      const startedAt = startTime === undefined ? undefined : new Date(startTime);
+      if (startedAt && startedAt.getTime() > now.getTime()) {
         throw new AppError(400, "startTime cannot be in the future", "INVALID_START_TIME");
       }
 
@@ -89,7 +89,7 @@ export function createSessionService({
         stationId,
         hourlyRate,
         controllerCount,
-        startedAt: startedAt.toISOString(),
+        startedAt: startedAt?.toISOString(),
       });
       if (result.outcome === "forbidden") throw new AppError(403, "Session start is not permitted", "FORBIDDEN");
       if (result.outcome === "station_not_found") throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
@@ -201,19 +201,21 @@ export function createSessionService({
         throw new AppError(409, "Only an active session can be paused", "INVALID_SESSION_TRANSITION");
       }
       const now = clock();
-      const selectedPause = pausedAt === undefined ? now : new Date(pausedAt);
-      const selectedPauseMs = selectedPause.getTime();
-      const startMs = new Date(session.startedAt).getTime();
-      if (!Number.isFinite(selectedPauseMs)) {
-        throw new AppError(400, "pausedAt must be a valid ISO date", "INVALID_PAUSE_TIME");
+      const selectedPause = pausedAt === undefined ? undefined : new Date(pausedAt);
+      if (selectedPause) {
+        const selectedPauseMs = selectedPause.getTime();
+        const startMs = new Date(session.startedAt).getTime();
+        if (!Number.isFinite(selectedPauseMs)) {
+          throw new AppError(400, "pausedAt must be a valid ISO date", "INVALID_PAUSE_TIME");
+        }
+        if (selectedPauseMs < startMs) {
+          throw new AppError(400, "pausedAt cannot be before the session start", "INVALID_PAUSE_TIME");
+        }
+        if (selectedPauseMs > now.getTime()) {
+          throw new AppError(400, "pausedAt cannot be in the future", "INVALID_PAUSE_TIME");
+        }
       }
-      if (selectedPauseMs < startMs) {
-        throw new AppError(400, "pausedAt cannot be before the session start", "INVALID_PAUSE_TIME");
-      }
-      if (selectedPauseMs > now.getTime()) {
-        throw new AppError(400, "pausedAt cannot be in the future", "INVALID_PAUSE_TIME");
-      }
-      const result = await sessions.pause(businessId, sessionId, userId, selectedPause.toISOString());
+      const result = await sessions.pause(businessId, sessionId, userId, selectedPause?.toISOString());
       if (result.outcome === "forbidden") throw new AppError(403, "Session pause is not permitted", "FORBIDDEN");
       if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
       if (result.outcome === "invalid_time") throw new AppError(400, "pausedAt is invalid", "INVALID_PAUSE_TIME");
@@ -222,8 +224,7 @@ export function createSessionService({
     },
 
     async resume({ businessId, sessionId, userId }) {
-      const now = clock();
-      const result = await sessions.resume(businessId, sessionId, userId, now.toISOString());
+      const result = await sessions.resume(businessId, sessionId, userId);
       if (result.outcome === "forbidden") throw new AppError(403, "Session resume is not permitted", "FORBIDDEN");
       if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
       if (result.outcome === "invalid_time") throw new AppError(400, "Resume time is invalid", "INVALID_RESUME_TIME");
@@ -261,6 +262,7 @@ export function createSessionService({
       if (result.outcome === "forbidden") throw new AppError(403, "Session update is not permitted", "FORBIDDEN");
       if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
       if (result.outcome === "station_not_found") throw new AppError(404, "Station not found", "STATION_NOT_FOUND");
+      if (result.outcome === "invalid_time") throw new AppError(400, "startTime cannot be in the future", "INVALID_START_TIME");
       if (result.outcome !== "updated" || !result.session) throw new AppError(409, "Session cannot be updated", "INVALID_SESSION_TRANSITION");
       return present(result.session);
     },

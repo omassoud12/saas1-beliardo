@@ -72,10 +72,10 @@ function AccessRouter({ session, onSignOut }) {
   if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
   if (result.access.state === "platform_admin") return <Suspense fallback={<div className="auth-loading" aria-label="Loading platform administration"><span /></div>}><PlatformAdmin onSignOut={onSignOut} /></Suspense>;
   if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;
-  return <AuthenticatedApp onSignOut={onSignOut} access={result.access} />;
+  return <AuthenticatedApp access={result.access} />;
 }
 
-function AuthenticatedApp({ onSignOut, access }) {
+function AuthenticatedApp({ access }) {
   const [stations, setStations, stationsHydrated, stationSyncError] = usePersistentStations({ businessId: access.tenant.id, canManage: access.permissions.manageStations });
   const [view, setView] = useState("home");
   const [selectedStationId, setSelectedStationId] = useState(null);
@@ -87,7 +87,7 @@ function AuthenticatedApp({ onSignOut, access }) {
   const [sessionActionPending, setSessionActionPending] = useState(false);
   const noticeTimeoutRef = useRef(null);
   const latestSessionsRef = useRef(null);
-  const cancellationPendingRef = useRef(false);
+  const sessionActionPendingRef = useRef(false);
 
   const selectedStation = stations.find((station) => station.id === selectedStationId) ?? null;
   const handleClosePanel = useCallback(() => setSelectedStationId(null), []);
@@ -112,6 +112,18 @@ function AuthenticatedApp({ onSignOut, access }) {
     window.clearTimeout(noticeTimeoutRef.current);
     setNotice(message);
     noticeTimeoutRef.current = window.setTimeout(() => setNotice(null), 3200);
+  }, []);
+
+  const beginSessionAction = useCallback(() => {
+    if (sessionActionPendingRef.current) return false;
+    sessionActionPendingRef.current = true;
+    setSessionActionPending(true);
+    return true;
+  }, []);
+
+  const finishSessionAction = useCallback(() => {
+    sessionActionPendingRef.current = false;
+    setSessionActionPending(false);
   }, []);
 
   useEffect(() => () => window.clearTimeout(noticeTimeoutRef.current), []);
@@ -193,26 +205,41 @@ function AuthenticatedApp({ onSignOut, access }) {
     showNotice(`${station ? getStationName(station) : "Station"} deleted`);
   }, [selectedStationId, setStations, showNotice, stations]);
 
-  const handleStartTimeChange = useCallback((value) => {
+  const handleStartTimeChange = useCallback(async (value) => {
     const timestamp = timeInputToTimestamp(value, Date.now());
     if (!timestamp) return;
-    updateSelectedStation((station) => station.status === "available"
-      ? { ...station, plannedStartAt: timestamp }
-      : { ...station, sessionStartAt: timestamp });
     const sessionId = sessionIds[selectedStationId];
-    if (sessionId) {
-      updateSession(sessionId, { startTime: new Date(timestamp).toISOString() })
-        .catch(() => showNotice("Unable to update the live start time"));
+    if (selectedStation?.status === "available") {
+      updateSelectedStation((station) => ({ ...station, plannedStartAt: timestamp }));
+      return;
     }
-  }, [selectedStationId, sessionIds, showNotice, updateSelectedStation]);
+    if (!sessionId) {
+      showNotice("Live session record not found");
+      return;
+    }
+    if (!beginSessionAction()) return;
+
+    const previousStartAt = selectedStation?.sessionStartAt ?? null;
+    updateSelectedStation((station) => ({ ...station, sessionStartAt: timestamp }));
+    try {
+      const session = await updateSession(sessionId, { startTime: new Date(timestamp).toISOString() });
+      updateSelectedStation((station) => stationFromSession(station, session));
+    } catch (error) {
+      updateSelectedStation((station) => ({ ...station, sessionStartAt: previousStartAt }));
+      showNotice(error.message || "Unable to update the live start time");
+    } finally {
+      finishSessionAction();
+    }
+  }, [beginSessionAction, finishSessionAction, selectedStation, selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
   const handleStart = useCallback(async (requestedControllerCount = 1) => {
     const station = stations.find((item) => item.id === selectedStationId);
-    if (!station || sessionActionPending) return;
-    setSessionActionPending(true);
+    if (!station || !beginSessionAction()) return;
     try {
       const controllerCount = station.type === "playstation" ? requestedControllerCount : undefined;
-      const startTime = new Date(station.plannedStartAt ?? Date.now()).toISOString();
+      const startTime = station.plannedStartAt == null
+        ? undefined
+        : new Date(station.plannedStartAt).toISOString();
       const session = await startNewSession(station.id, station.hourlyRate, controllerCount, startTime);
       setSessionIds((current) => ({ ...current, [station.id]: session.id }));
       updateSelectedStation((current) => stationFromSession(current, session));
@@ -220,17 +247,17 @@ function AuthenticatedApp({ onSignOut, access }) {
     } catch (error) {
       showNotice(error.message || "Unable to start session");
     } finally {
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStationId, sessionActionPending, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStationId, showNotice, stations, updateSelectedStation]);
 
   const handleResume = useCallback(async () => {
     const sessionId = sessionIds[selectedStationId];
-    if (!sessionId || sessionActionPending) {
+    if (!sessionId) {
       showNotice("Live session record not found");
       return false;
     }
-    setSessionActionPending(true);
+    if (!beginSessionAction()) return false;
     try {
       const session = await resumeSession(sessionId);
       updateSelectedStation((station) => stationFromSession(station, session));
@@ -239,40 +266,41 @@ function AuthenticatedApp({ onSignOut, access }) {
       showNotice(error.message || "Unable to resume session");
       return false;
     } finally {
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
   const handleBeginEnd = useCallback(async (stoppedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
     const sessionId = sessionIds[selectedStationId];
-    if (!currentStation || !sessionId || sessionActionPending) {
+    if (!currentStation || !sessionId) {
       showNotice("Live session record not found");
       return false;
     }
-    if (currentStation.status === "paused") return true;
+    if (currentStation.status === "paused") return currentStation.pausedAt ?? stoppedAt;
+    if (!beginSessionAction()) return false;
 
-    setSessionActionPending(true);
     try {
-      const session = await pauseSession(sessionId, new Date(stoppedAt).toISOString());
+      const session = await pauseSession(sessionId);
       updateSelectedStation((station) => stationFromSession(station, session));
-      return true;
+      const serverPausedAt = new Date(session.pausedAt).getTime();
+      return Number.isFinite(serverPausedAt) ? serverPausedAt : stoppedAt;
     } catch (error) {
       showNotice(error.message || "Unable to stop session");
       return false;
     } finally {
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleEnd = useCallback(async (endedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
     const sessionId = sessionIds[selectedStationId];
-    if (!currentStation || !sessionId || sessionActionPending) {
+    if (!currentStation || !sessionId) {
       showNotice("Live session record not found");
       return;
     }
-    setSessionActionPending(true);
+    if (!beginSessionAction()) return;
     try {
       const session = await endSession(sessionId, endedAt);
       updateSelectedStation(resetStationSession);
@@ -287,19 +315,18 @@ function AuthenticatedApp({ onSignOut, access }) {
     } catch (error) {
       showNotice(error.message || "Unable to end session");
     } finally {
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleCancel = useCallback(async () => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
     const sessionId = sessionIds[selectedStationId];
-    if (!currentStation || !sessionId || sessionActionPending || cancellationPendingRef.current) {
-      if (!sessionActionPending && !cancellationPendingRef.current) showNotice("Live session record not found");
+    if (!currentStation || !sessionId) {
+      showNotice("Live session record not found");
       return;
     }
-    cancellationPendingRef.current = true;
-    setSessionActionPending(true);
+    if (!beginSessionAction()) return;
     try {
       await cancelSession(sessionId);
       latestSessionsRef.current = latestSessionsRef.current?.filter((session) => session.id !== sessionId) ?? null;
@@ -314,10 +341,9 @@ function AuthenticatedApp({ onSignOut, access }) {
     } catch (error) {
       showNotice(error.message || "Unable to cancel session");
     } finally {
-      cancellationPendingRef.current = false;
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStationId, sessionActionPending, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleViewChange = useCallback((nextView) => {
     if (nextView !== "home" && nextView !== "employees" && !access.permissions.viewAnalytics) return;
@@ -340,10 +366,9 @@ function AuthenticatedApp({ onSignOut, access }) {
     const controllerCount = Math.min(99, Math.max(1, Number(value) || 1));
     const previousControllerCount = Number(selectedStation?.controllerCount) || 1;
     const sessionId = sessionIds[selectedStationId];
-    if (!sessionId || selectedStation?.type !== "playstation" || sessionActionPending) return;
+    if (!sessionId || selectedStation?.type !== "playstation" || !beginSessionAction()) return;
 
     updateSelectedStation((station) => ({ ...station, controllerCount }));
-    setSessionActionPending(true);
     try {
       const session = await updateSession(sessionId, { controllerCount });
       updateSelectedStation((station) => ({ ...station, controllerCount: session.controllerCount }));
@@ -351,9 +376,9 @@ function AuthenticatedApp({ onSignOut, access }) {
       updateSelectedStation((station) => ({ ...station, controllerCount: previousControllerCount }));
       showNotice(error.message || "Unable to update the controller count");
     } finally {
-      setSessionActionPending(false);
+      finishSessionAction();
     }
-  }, [selectedStation, selectedStationId, sessionActionPending, sessionIds, showNotice, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, selectedStation, selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
   return (
     <div className="app-shell">
@@ -361,7 +386,7 @@ function AuthenticatedApp({ onSignOut, access }) {
       <div className="ambient ambient--two" aria-hidden="true" />
 
       <main className="dashboard">
-        <Header summary={summary} view={view} onViewChange={handleViewChange} onSignOut={onSignOut} permissions={access.permissions} />
+        <Header summary={summary} view={view} onViewChange={handleViewChange} permissions={access.permissions} />
         {view === "home" ? (
           <Home
             stations={stations}

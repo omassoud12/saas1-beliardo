@@ -3,8 +3,7 @@ import { createAuthenticatedRequestKey, createInFlightRequestCache } from "./inF
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
 const getRequests = createInFlightRequestCache();
-const cancelRequests = createInFlightRequestCache();
-const endRequests = createInFlightRequestCache();
+const sessionMutationRequests = createInFlightRequestCache();
 let sessionRequest;
 
 async function getAuthenticatedSession() {
@@ -127,17 +126,19 @@ export async function createSession(stationId, hourlyRate, controllerCount) {
   return payload.data.session;
 }
 
-export async function startNewSession(stationId, hourlyRate, controllerCount, startTime) {
-  const payload = await apiRequest("/sessions/start", {
-    method: "POST",
-    body: JSON.stringify({
-      stationId,
-      hourlyRate,
-      ...(controllerCount ? { controllerCount } : {}),
-      startTime,
-    }),
+export function startNewSession(stationId, hourlyRate, controllerCount, startTime) {
+  return sessionMutationRequests.run(`start:${stationId}`, async () => {
+    const payload = await apiRequest("/sessions/start", {
+      method: "POST",
+      body: JSON.stringify({
+        stationId,
+        hourlyRate,
+        ...(controllerCount ? { controllerCount } : {}),
+        ...(startTime === undefined ? {} : { startTime }),
+      }),
+    });
+    return payload.data.session;
   });
-  return payload.data.session;
 }
 
 export async function startSession(sessionId, startTime) {
@@ -145,17 +146,21 @@ export async function startSession(sessionId, startTime) {
   return payload.data.session;
 }
 
-export async function pauseSession(sessionId, pausedAt) {
-  const payload = await apiRequest(`/sessions/${sessionId}/pause`, {
-    method: "POST",
-    body: JSON.stringify({ pausedAt }),
+export function pauseSession(sessionId, pausedAt) {
+  return sessionMutationRequests.run(`pause:${sessionId}`, async () => {
+    const payload = await apiRequest(`/sessions/${sessionId}/pause`, {
+      method: "POST",
+      body: JSON.stringify(pausedAt === undefined ? {} : { pausedAt }),
+    });
+    return payload.data.session;
   });
-  return payload.data.session;
 }
 
-export async function resumeSession(sessionId) {
-  const payload = await apiRequest(`/sessions/${sessionId}/resume`, { method: "POST", body: "{}" });
-  return payload.data.session;
+export function resumeSession(sessionId) {
+  return sessionMutationRequests.run(`resume:${sessionId}`, async () => {
+    const payload = await apiRequest(`/sessions/${sessionId}/resume`, { method: "POST", body: "{}" });
+    return payload.data.session;
+  });
 }
 
 export async function updateSession(sessionId, values) {
@@ -164,17 +169,18 @@ export async function updateSession(sessionId, values) {
 }
 
 export function endSession(sessionId, endedAt) {
-  return endRequests.run(sessionId, async () => {
+  if (!endedAt) return Promise.reject(new Error("A confirmed end time is required"));
+  return sessionMutationRequests.run(`end:${sessionId}`, async () => {
     const payload = await apiRequest(`/sessions/${sessionId}/end`, {
       method: "POST",
-      body: JSON.stringify(endedAt ? { endedAt } : {}),
+      body: JSON.stringify({ endedAt }),
     });
     return payload.data.session;
   });
 }
 
 export function cancelSession(sessionId) {
-  return cancelRequests.run(sessionId, async () => {
+  return sessionMutationRequests.run(`cancel:${sessionId}`, async () => {
     const payload = await apiRequest(`/sessions/${sessionId}/cancel`, { method: "POST", body: "{}" });
     return payload.data.session;
   });

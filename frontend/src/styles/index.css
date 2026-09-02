@@ -1613,6 +1613,53 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   padding-top: 20px;
 }
 
+.activity-details__summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 0 0 14px;
+}
+
+.activity-details__summary-item {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.012);
+}
+
+.activity-details__summary-item--revenue {
+  border-color: rgba(201, 211, 163, 0.24);
+  background: rgba(201, 211, 163, 0.035);
+}
+
+.activity-details__summary-item dt {
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.activity-details__summary-value {
+  margin: 7px 0 5px;
+  color: var(--text);
+  font-size: clamp(1.25rem, 2vw, 1.55rem);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.025em;
+}
+
+.activity-details__summary-item--revenue .activity-details__summary-value {
+  color: var(--accent);
+}
+
+.activity-details__summary-description {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.45;
+}
+
 .activity-list {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -1759,6 +1806,10 @@ input[type="time"]::-webkit-calendar-picker-indicator {
 
   .activity-details__toggle {
     width: 100%;
+  }
+
+  .activity-details__summary {
+    grid-template-columns: 1fr;
   }
 
   .activity-list__head,
@@ -3778,9 +3829,35 @@ button.calendar-day:hover {
   .business-report-field--wide { grid-column: auto; }
   .business-report-dialog footer .button { flex: 1; }
   .business-page-header h2 { font-size: 2.1rem; }
-  .business-kpi-grid { grid-template-columns: 1fr; }
-  .business-kpi { min-height: 128px; }
-  .business-kpi strong { margin-top: 14px; }
+  .business-kpi-grid {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(160px, 48%);
+    gap: 10px;
+    padding: 2px 2px 10px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: inline proximity;
+    scrollbar-width: thin;
+  }
+  .business-kpi {
+    display: grid;
+    grid-template-rows: auto 1fr;
+    min-height: 104px;
+    padding: 14px;
+    border-radius: 12px;
+    scroll-snap-align: start;
+  }
+  .business-kpi__topline { gap: 7px; font-size: 0.67rem; }
+  .business-kpi__icon { width: 22px; height: 22px; font-size: 0.65rem; }
+  .business-kpi strong {
+    align-self: center;
+    justify-self: center;
+    margin-top: 0;
+    font-size: 1.2rem;
+    text-align: center;
+  }
+  .business-kpi p { display: none; }
   .period-navigator { flex-wrap: wrap; }
   .period-navigator__today { flex-basis: 100%; }
   .yearly-month-grid { grid-template-columns: 1fr; }

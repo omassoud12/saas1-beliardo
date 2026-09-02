@@ -46,7 +46,7 @@ export const sessionRepository = {
       p_station_id: values.stationId,
       p_hourly_rate: values.hourlyRate,
       p_controller_count: values.controllerCount ?? null,
-      p_started_at: values.startedAt,
+      p_started_at: values.startedAt ?? null,
     });
     throwDatabaseError(error);
     const result = data?.[0] ?? { outcome: "station_not_found", session_record: null };
@@ -156,7 +156,7 @@ export const sessionRepository = {
       p_business_id: businessId,
       p_session_id: sessionId,
       p_actor_user_id: actorUserId,
-      p_paused_at: pausedAt,
+      p_paused_at: pausedAt ?? null,
     });
     throwDatabaseError(error);
     const result = data?.[0] ?? { outcome: "not_found", session_record: null };
@@ -168,7 +168,7 @@ export const sessionRepository = {
       p_business_id: businessId,
       p_session_id: sessionId,
       p_actor_user_id: actorUserId,
-      p_resumed_at: resumedAt,
+      p_resumed_at: resumedAt ?? null,
     });
     throwDatabaseError(error);
     const result = data?.[0] ?? { outcome: "not_found", session_record: null };

@@ -23,6 +23,15 @@ export function ActivityDetails({ currentBusinessDate, refreshKey, timezone = "U
     businessDate: currentBusinessDate,
   });
 
+  const completedRevenue = state.activities.reduce(
+    (total, activity) => total + (Number(activity.finalCost) || 0),
+    0,
+  );
+  const completedHours = state.activities.reduce(
+    (total, activity) => total + (Number(activity.finalElapsedSeconds) || 0),
+    0,
+  ) / 3600;
+
   useEffect(() => {
     if (!open) return undefined;
     let cancelled = false;
@@ -71,6 +80,18 @@ export function ActivityDetails({ currentBusinessDate, refreshKey, timezone = "U
         aria-hidden={!open}
       >
         <div className="activity-details__content-inner">
+          <dl className="activity-details__summary" aria-label="Completed activity summary">
+            <div className="activity-details__summary-item activity-details__summary-item--revenue">
+              <dt>Revenue</dt>
+              <dd className="activity-details__summary-value">{formatMoney(completedRevenue)}</dd>
+              <dd className="activity-details__summary-description">Completed-session revenue</dd>
+            </div>
+            <div className="activity-details__summary-item">
+              <dt>Total Hours</dt>
+              <dd className="activity-details__summary-value">{completedHours.toFixed(2)} hrs</dd>
+              <dd className="activity-details__summary-description">Stored completed-session duration</dd>
+            </div>
+          </dl>
           {state.loading ? (
             <div className="activity-details__state" role="status">
               <span className="activity-details__loader" aria-hidden="true" />

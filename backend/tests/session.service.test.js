@@ -13,7 +13,7 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
   let now = new Date("2026-08-24T10:00:00.000Z");
   const station = { id: "station-1", status: "available", type: stationType, hourlyRate };
   const records = new Map();
-  const calls = { startNew: 0 };
+  const calls = { startNew: 0, startNewValues: [], pauseValues: [], resumeValues: [] };
   let sequence = 0;
   const mapFields = {
     started_at: "startedAt", paused_at: "pausedAt", ended_at: "endedAt",
@@ -25,6 +25,7 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
   const sessions = {
     async startNew(values) {
       calls.startNew += 1;
+      calls.startNewValues.push(values);
       if (station.status !== "available") return { outcome: "station_unavailable", session: null };
       const openSession = [...records.values()].find((record) => (
         record.businessId === values.businessId
@@ -39,7 +40,7 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
         id: `session-${++sequence}`, stationId: values.stationId, businessId: values.businessId,
         createdBy: values.startedBy, status: "active", hourlyRate: values.hourlyRate ?? station.hourlyRate,
         controllerCount: station.type === "playstation" ? (values.controllerCount ?? 1) : 1,
-        startedAt: values.startedAt, pausedAt: null, endedAt: null, totalPausedSeconds: 0,
+        startedAt: values.startedAt ?? now.toISOString(), pausedAt: null, endedAt: null, totalPausedSeconds: 0,
         finalElapsedSeconds: null, finalCost: null, cancelledAt: null, cancelledBy: null,
         endedRecordedAt: null, endedBy: null, pauseIntervals: [], updatedAt: now.toISOString(),
       };
@@ -87,24 +88,28 @@ function createHarness({ cancelFailure = null, endFailure = null, stationType = 
         : { outcome: "updated", session: { ...record } };
     },
     async pause(_businessId, id, _userId, pausedAt) {
+      calls.pauseValues.push(pausedAt);
       const record = records.get(id);
       if (!record) return { outcome: "not_found", session: null };
       if (record.status !== "active") return { outcome: "invalid_state", session: { ...record } };
+      const selectedPausedAt = pausedAt ?? now.toISOString();
       record.status = "paused";
-      record.pausedAt = pausedAt;
-      record.pauseIntervals = [...record.pauseIntervals, { startedAt: pausedAt, endedAt: null }];
+      record.pausedAt = selectedPausedAt;
+      record.pauseIntervals = [...record.pauseIntervals, { startedAt: selectedPausedAt, endedAt: null }];
       record.updatedAt = now.toISOString();
       return { outcome: "paused", session: { ...record } };
     },
     async resume(_businessId, id, _userId, resumedAt) {
+      calls.resumeValues.push(resumedAt);
       const record = records.get(id);
       if (!record) return { outcome: "not_found", session: null };
       if (record.status !== "paused") return { outcome: "invalid_state", session: { ...record } };
-      const elapsed = Math.max(0, Math.floor((new Date(resumedAt) - new Date(record.pausedAt)) / 1000));
+      const selectedResumedAt = resumedAt ?? now.toISOString();
+      const elapsed = Math.max(0, Math.floor((new Date(selectedResumedAt) - new Date(record.pausedAt)) / 1000));
       record.status = "active";
       record.totalPausedSeconds += elapsed;
       record.pauseIntervals = record.pauseIntervals.map((interval, index) => (
-        index === record.pauseIntervals.length - 1 ? { ...interval, endedAt: resumedAt } : interval
+        index === record.pauseIntervals.length - 1 ? { ...interval, endedAt: selectedResumedAt } : interval
       ));
       record.pausedAt = null;
       record.updatedAt = now.toISOString();
@@ -174,6 +179,18 @@ test("atomic start creates one active PlayStation session in one repository oper
   assert.equal(harness.station.status, "active");
 });
 
+test("start now lets the database select its authoritative timestamp", async () => {
+  const harness = createHarness();
+  const session = await harness.service.startNew({
+    businessId: "business-1",
+    userId: "user-1",
+    stationId: "station-1",
+  });
+
+  assert.equal(harness.calls.startNewValues[0].startedAt, undefined);
+  assert.equal(session.startedAt, "2026-08-24T10:00:00.000Z");
+});
+
 test("atomic start rejects a future time before calling the repository", async () => {
   const harness = createHarness();
   await assert.rejects(
@@ -209,6 +226,28 @@ test("session lifecycle excludes paused time and calculates final cost", async (
   assert.equal(ended.finalElapsedSeconds, 3000);
   assert.equal(ended.finalCost, 10);
   assert.equal(harness.station.status, "available");
+});
+
+test("pause and resume now let the database select authoritative timestamps", async () => {
+  const harness = createHarness();
+  const created = await harness.service.create({
+    businessId: "business-1", userId: "user-1", stationId: "station-1",
+  });
+  await harness.service.start({ businessId: "business-1", sessionId: created.id });
+
+  harness.setTime("2026-08-24T10:30:00.000Z");
+  const paused = await harness.service.pause({
+    businessId: "business-1", sessionId: created.id, userId: "user-1",
+  });
+  assert.equal(harness.calls.pauseValues[0], undefined);
+  assert.equal(paused.pausedAt, "2026-08-24T10:30:00.000Z");
+
+  harness.setTime("2026-08-24T10:40:00.000Z");
+  const resumed = await harness.service.resume({
+    businessId: "business-1", sessionId: created.id, userId: "user-1",
+  });
+  assert.equal(harness.calls.resumeValues[0], undefined);
+  assert.equal(resumed.totalPausedSeconds, 600);
 });
 
 test("invalid lifecycle transitions are rejected", async () => {
@@ -544,11 +583,9 @@ test("failed atomic completion leaves the live session and station unchanged", a
   assert.equal(harness.station.status, "active");
 });
 
-test("end request validation accepts an optional ISO timestamp and rejects date-only input", () => {
+test("end request validation requires an ISO timestamp and rejects date-only input", () => {
   const id = "123e4567-e89b-42d3-a456-426614174000";
-  assert.deepEqual(validateEndSession({ params: { id }, body: {} }), {
-    success: true, data: { sessionId: id, endedAt: undefined },
-  });
+  assert.equal(validateEndSession({ params: { id }, body: {} }).success, false);
   assert.equal(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27" } }).success, false);
   assert.deepEqual(validateEndSession({ params: { id }, body: { endedAt: "2026-08-27T11:30:00+03:00" } }), {
     success: true, data: { sessionId: id, endedAt: "2026-08-27T08:30:00.000Z" },

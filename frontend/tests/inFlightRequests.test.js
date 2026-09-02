@@ -56,3 +56,13 @@ test("double cancellation confirmation reuses one mutation request", async () =>
   resolveCancellation({ status: "cancelled" });
   assert.equal((await second).status, "cancelled");
 });
+
+test("different lifecycle actions for one session never share a request", async () => {
+  const requests = createInFlightRequestCache();
+  const pause = requests.run("pause:session-1", async () => "paused");
+  const resume = requests.run("resume:session-1", async () => "resumed");
+
+  assert.notEqual(pause, resume);
+  assert.equal(await pause, "paused");
+  assert.equal(await resume, "resumed");
+});
