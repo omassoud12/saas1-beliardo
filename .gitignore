@@ -7,6 +7,11 @@ dist/
 coverage/
 artifacts/
 .npm-cache/
+.tools/
+
+# Locally downloaded Node.js distributions
+node-*-win-*.zip
+node-*-x64.msi
 
 # Local environment files (keep templates)
 .env
