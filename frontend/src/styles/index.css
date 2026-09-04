@@ -122,6 +122,31 @@ input,
   display: flex;
   align-items: center;
   gap: 16px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.brand-block:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.035);
+  transform: translateY(-1px);
+}
+
+.brand-block:active {
+  transform: translateY(0);
+}
+
+.brand-block:focus-visible {
+  outline: 2px solid var(--felt);
+  outline-offset: 3px;
 }
 
 .brand-mark {

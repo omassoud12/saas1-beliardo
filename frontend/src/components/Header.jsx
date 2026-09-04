@@ -5,7 +5,7 @@ export function Header({ summary, view, onViewChange, permissions }) {
 
   return (
     <header className="app-header">
-      <div className="brand-block">
+      <a className="brand-block" href="/" aria-label="Go to public home page">
         <div className="brand-mark" aria-hidden="true">
           <span />
           <span />
@@ -15,7 +15,7 @@ export function Header({ summary, view, onViewChange, permissions }) {
           <p className="eyebrow">SaaS1-Lounge Hall</p>
           <h1>Hall operations</h1>
         </div>
-      </div>
+      </a>
 
       <nav className="primary-nav" aria-label="Primary navigation">
         <button
