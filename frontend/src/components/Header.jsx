@@ -12,7 +12,7 @@ export function Header({ summary, view, onViewChange, permissions }) {
           <span />
         </div>
         <div>
-          <p className="eyebrow">Billiard Hall</p>
+          <p className="eyebrow">SaaS1-Lounge Hall</p>
           <h1>Hall operations</h1>
         </div>
       </div>
