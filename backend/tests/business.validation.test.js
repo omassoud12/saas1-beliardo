@@ -26,7 +26,7 @@ test("business PDF validation normalizes safe owner configuration", () => {
   assert.equal(result.success, true);
   assert.deepEqual(result.data, {
     reportType: "monthly", year: 2026, month: 8,
-    title: "August Summary", notes: "Owner note", language: "en",
+    title: "August Summary", notes: "Owner note", language: "en", theme: "light",
     sections: { summary: true, charts: false, categoryBreakdown: true, detailsTable: true },
   });
 });
@@ -44,4 +44,13 @@ test("business PDF validation rejects invalid periods, oversized text, and empty
 test("saved business report ids require UUIDs", () => {
   assert.equal(validateBusinessReportId({ params: { reportId: "4a9ea7f5-4d40-4c19-87e8-a9ce8a1d9df0" } }).success, true);
   assert.equal(validateBusinessReportId({ params: { reportId: "../report.pdf" } }).success, false);
+});
+
+test("business PDF validation accepts only supported themes", () => {
+  const dark = validateBusinessReport({ body: { reportType: "yearly", year: 2026, theme: "dark" } });
+  assert.equal(dark.success, true);
+  assert.equal(dark.data.theme, "dark");
+  const invalid = validateBusinessReport({ body: { reportType: "yearly", year: 2026, theme: "neon" } });
+  assert.equal(invalid.success, false);
+  assert.match(invalid.errors.join(" "), /theme must be dark or light/);
 });

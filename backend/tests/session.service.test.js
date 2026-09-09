@@ -642,3 +642,97 @@ test("update request validation accepts a live controller count change", () => {
     data: { sessionId, hourlyRate: undefined, controllerCount: 4, startTime: undefined },
   });
 });
+
+test("20 employees can each start and end 20 concurrent sessions without double-booking", async () => {
+  let now = new Date("2026-09-05T18:00:00.000Z");
+  let sequence = 0;
+  const businessId = "business-load-test";
+  const accounts = Array.from({ length: 20 }, (_, index) => `employee-${index + 1}`);
+  const jobs = accounts.flatMap((userId, employeeIndex) => Array.from({ length: 20 }, (_, sessionIndex) => ({
+    userId,
+    stationId: `station-${employeeIndex + 1}-${sessionIndex + 1}`,
+  })));
+  const stationRates = new Map(jobs.map(({ stationId }, index) => [stationId, 10 + (index % 5) * 2]));
+  const stationStatuses = new Map([...stationRates.keys()].map((id) => [id, "available"]));
+  const records = new Map();
+
+  const sessions = {
+    async startNew(values) {
+      if (values.businessId !== businessId || !stationRates.has(values.stationId)) {
+        return { outcome: "station_not_found", session: null };
+      }
+      if (stationStatuses.get(values.stationId) !== "available") {
+        return { outcome: "station_unavailable", session: null };
+      }
+      stationStatuses.set(values.stationId, "active");
+      const session = {
+        id: `multi-session-${++sequence}`,
+        businessId,
+        stationId: values.stationId,
+        createdBy: values.startedBy,
+        status: "active",
+        hourlyRate: stationRates.get(values.stationId),
+        controllerCount: 1,
+        startedAt: now.toISOString(),
+        pausedAt: null,
+        totalPausedSeconds: 0,
+        pauseIntervals: [],
+        updatedAt: now.toISOString(),
+      };
+      records.set(session.id, session);
+      return { outcome: "started", session: { ...session } };
+    },
+    async findById(requestedBusinessId, sessionId) {
+      const session = records.get(sessionId);
+      return session?.businessId === requestedBusinessId ? { ...session } : null;
+    },
+    async complete(values) {
+      const session = records.get(values.sessionId);
+      if (!session || session.businessId !== values.businessId) return { outcome: "not_found", session: null };
+      if (session.status !== "active") return { outcome: "invalid_state", session: { ...session } };
+      if (session.updatedAt !== values.expectedUpdatedAt) return { outcome: "conflict", session: { ...session } };
+      Object.assign(session, {
+        status: "completed",
+        endedAt: values.endedAt,
+        endedBy: values.endedBy,
+        finalElapsedSeconds: values.finalElapsedSeconds,
+        finalCost: values.finalCost,
+        updatedAt: now.toISOString(),
+      });
+      stationStatuses.set(session.stationId, "available");
+      return { outcome: "completed", session: { ...session } };
+    },
+  };
+  const service = createSessionService({ sessions, stations: {}, clock: () => new Date(now) });
+
+  const started = await Promise.all(jobs.map(({ userId, stationId }) => service.startNew({
+    businessId,
+    userId,
+    stationId,
+  })));
+  assert.equal(started.length, 400);
+  assert.equal(new Set(started.map((session) => session.id)).size, 400);
+  assert.equal([...stationStatuses.values()].filter((status) => status === "active").length, 400);
+  for (const userId of accounts) {
+    assert.equal(started.filter((session) => session.createdBy === userId).length, 20);
+  }
+
+  await assert.rejects(
+    service.startNew({ businessId, userId: "employee-21", stationId: jobs[0].stationId }),
+    (error) => error.statusCode === 409 && error.code === "STATION_UNAVAILABLE",
+  );
+
+  now = new Date("2026-09-05T18:30:00.000Z");
+  const completed = await Promise.all(started.map((session) => service.end({
+    businessId,
+    sessionId: session.id,
+    userId: session.createdBy,
+  })));
+
+  assert.equal(completed.length, 400);
+  assert.ok(completed.every((session) => session.status === "completed"));
+  assert.ok(completed.every((session) => session.finalElapsedSeconds === 1800));
+  assert.ok(completed.every((session) => session.finalCost === session.hourlyRate / 2));
+  assert.ok(completed.every((session) => session.endedBy === session.createdBy));
+  assert.equal([...stationStatuses.values()].filter((status) => status === "available").length, 400);
+});

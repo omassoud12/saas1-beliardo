@@ -9,6 +9,11 @@ async function rows(query) {
 }
 
 export const platformRepository = {
+  async findManagedProfile(userId) {
+    const { data, error } = await getSupabaseAdmin().from("profiles").select("id,email").eq("id", userId).maybeSingle();
+    throwDatabaseError(error);
+    return data;
+  },
   async transitionUser(actorUserId, userId, action) {
     const { data, error } = await getSupabaseAdmin().rpc("transition_managed_user_atomic", {
       p_actor_user_id: actorUserId,
@@ -31,6 +36,14 @@ export const platformRepository = {
     const { error } = await getSupabaseAdmin().auth.admin.updateUserById(userId, {
       ban_duration: banned ? "876000h" : "none",
     });
+    throwDatabaseError(error);
+  },
+  async deleteAuthUser(userId) {
+    const { error } = await getSupabaseAdmin().auth.admin.deleteUser(userId, false);
+    throwDatabaseError(error);
+  },
+  async revokePendingInvitationsForEmail(email) {
+    const { error } = await getSupabaseAdmin().from("employee_invitations").update({ status: "revoked" }).eq("email", email.toLowerCase()).eq("status", "pending");
     throwDatabaseError(error);
   },
   listOwnerProfiles() {

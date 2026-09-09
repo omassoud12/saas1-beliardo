@@ -8,11 +8,18 @@ import {
 import { formatDate, formatMonth } from "../../utils/analytics";
 
 const sectionOptions = [
-  ["summary", "Summary KPIs"],
-  ["charts", "Business charts"],
-  ["categoryBreakdown", "Category breakdown"],
-  ["detailsTable", "Detailed data table"],
+  ["summary", "Executive summary"],
+  ["categoryBreakdown", "Activity mix"],
+  ["charts", "Charts (optional)"],
+  ["detailsTable", "Detailed records (optional)"],
 ];
+
+const defaultSections = {
+  summary: true,
+  categoryBreakdown: true,
+  charts: false,
+  detailsTable: false,
+};
 
 function periodLabel({ reportType, date, year, month }) {
   if (reportType === "daily") return formatDate(date);
@@ -31,7 +38,7 @@ function reportDate(value) {
 
 const emptyLibrary = { loading: false, error: "", quota: null, reports: [] };
 
-export function BusinessReportExport({ reportType, date, year, month }) {
+export function BusinessReportExport({ reportType, date, year, month, theme = "dark" }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState(null);
   const [status, setStatus] = useState({ generating: false, error: "", success: "" });
@@ -46,7 +53,7 @@ export function BusinessReportExport({ reportType, date, year, month }) {
       title: defaultTitle(reportType, period),
       notes: "",
       language: "en",
-      sections: Object.fromEntries(sectionOptions.map(([key]) => [key, true])),
+      sections: { ...defaultSections },
     });
     setStatus({ generating: false, error: "", success: "" });
   }, [open, reportType, period]);
@@ -143,7 +150,7 @@ export function BusinessReportExport({ reportType, date, year, month }) {
         <span aria-hidden="true">PDF</span> Export PDF
       </button>
       {open && form && createPortal(
-        <div className="business-report-overlay" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
+        <div className={`business-report-overlay business-report-overlay--${theme}`} role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) close(); }}>
           <section className="business-report-dialog" role="dialog" aria-modal="true" aria-labelledby="business-report-title">
             <header>
               <div><p className="eyebrow">Business report</p><h2 id="business-report-title">Export PDF</h2></div>

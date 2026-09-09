@@ -7,7 +7,7 @@
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
     "build": "node --check src/server.js",
-    "test": "node --test --test-isolation=none"
+    "test": "node --test"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.4",
@@ -18,6 +18,9 @@
     "puppeteer": "^25.9.0",
     "rate-limit-redis": "^6.0.1",
     "redis": "^6.2.1"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

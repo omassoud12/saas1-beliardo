@@ -39,14 +39,19 @@ function AccessRouter({ session, onSignOut }) {
       try {
         const token = getPendingInvitation();
         let passwordReason = window.sessionStorage.getItem(passwordSetupKey) || "";
-        if (token) {
-          if (invitationAcceptanceRef.current.token !== token) {
+        const acceptOnce = (invitationToken) => {
+          const acceptanceKey = `${session.user.id}:${invitationToken || "verified-email"}`;
+          if (invitationAcceptanceRef.current.token !== acceptanceKey) {
             invitationAcceptanceRef.current = {
-              token,
-              promise: acceptEmployeeInvitation(token),
+              token: acceptanceKey,
+              promise: acceptEmployeeInvitation(invitationToken),
             };
           }
-          await invitationAcceptanceRef.current.promise;
+          return invitationAcceptanceRef.current.promise;
+        };
+        if (token) {
+          try { await acceptOnce(token); }
+          catch (error) { if (error.code !== "INVITATION_ALREADY_USED") throw error; }
           clearPendingInvitation();
           passwordReason = "invite";
           window.sessionStorage.setItem(passwordSetupKey, passwordReason);
@@ -56,7 +61,19 @@ function AccessRouter({ session, onSignOut }) {
           window.sessionStorage.setItem(passwordSetupKey, passwordReason);
           clearPendingPasswordReset();
         }
-        const access = await fetchMyAccess();
+        let access = await fetchMyAccess();
+        if (!token && access.state === "pending_email") {
+          try {
+            await acceptOnce(null);
+          } catch (error) {
+            if (!["INVITATION_NOT_FOUND", "INVITATION_ALREADY_USED"].includes(error.code)) throw error;
+          }
+          access = await fetchMyAccess();
+          if (access.profile.requiresPasswordSetup) {
+            passwordReason = "invite";
+            window.sessionStorage.setItem(passwordSetupKey, passwordReason);
+          }
+        }
         const requiresPassword = Boolean(passwordReason || access.profile.requiresPasswordSetup);
         if (mounted) setResult({ loading: false, access, error: "", needsPassword: requiresPassword, passwordReason: passwordReason || "invite" });
       } catch (error) {
@@ -126,6 +143,37 @@ function AuthenticatedApp({ access }) {
     setSessionActionPending(false);
   }, []);
 
+  const applyActiveSessionStatus = useCallback((status) => {
+    latestSessionsRef.current = status.sessions;
+    const ids = {};
+    for (const session of status.sessions) ids[session.stationId] = session.id;
+    setSessionIds(ids);
+    setFinishedToday(status.finishedToday);
+    setBusinessDate(status.businessDate);
+    setStations((currentStations) => currentStations.map((station) => {
+      const session = status.sessions.find((item) => item.stationId === station.id);
+      if (session) return stationFromSession(station, session);
+      return ["active", "paused"].includes(station.status) ? resetStationSession(station) : station;
+    }));
+  }, [setStations]);
+
+  const reconcileSessionAction = useCallback(async (sessionId, error) => {
+    if (error?.code === "REQUEST_TIMEOUT") {
+      showNotice("Connection timed out · Checking the latest session status");
+      await new Promise((resolve) => window.setTimeout(resolve, 350));
+    }
+    try {
+      const status = await fetchActiveSessions({ timeoutMs: 5_000 });
+      applyActiveSessionStatus(status);
+      return {
+        refreshed: true,
+        session: status.sessions.find((item) => item.id === sessionId) ?? null,
+      };
+    } catch {
+      return { refreshed: false, session: null };
+    }
+  }, [applyActiveSessionStatus, showNotice]);
+
   useEffect(() => () => window.clearTimeout(noticeTimeoutRef.current), []);
 
   useEffect(() => {
@@ -141,17 +189,7 @@ function AuthenticatedApp({ access }) {
       try {
         const status = await fetchActiveSessions();
         if (cancelled) return;
-        latestSessionsRef.current = status.sessions;
-        const ids = {};
-        for (const session of status.sessions) ids[session.stationId] = session.id;
-        setSessionIds(ids);
-        setFinishedToday(status.finishedToday);
-        setBusinessDate(status.businessDate);
-        setStations((currentStations) => currentStations.map((station) => {
-          const session = status.sessions.find((item) => item.stationId === station.id);
-          if (session) return stationFromSession(station, session);
-          return ["active", "paused"].includes(station.status) ? resetStationSession(station) : station;
-        }));
+        applyActiveSessionStatus(status);
         const boundaryTimestamp = new Date(status.nextBusinessDayAt).getTime();
         const delay = Number.isFinite(boundaryTimestamp)
           ? Math.max(1000, boundaryTimestamp - Date.now() + 100)
@@ -167,7 +205,7 @@ function AuthenticatedApp({ access }) {
       cancelled = true;
       window.clearTimeout(boundaryTimer);
     };
-  }, [setStations]);
+  }, [applyActiveSessionStatus]);
 
   useEffect(() => {
     if (!stationsHydrated || !latestSessionsRef.current) return;
@@ -263,12 +301,21 @@ function AuthenticatedApp({ access }) {
       updateSelectedStation((station) => stationFromSession(station, session));
       return true;
     } catch (error) {
+      const reconciled = await reconcileSessionAction(sessionId, error);
+      if (reconciled.refreshed && reconciled.session?.status === "active") {
+        showNotice("Session resumed · Status confirmed");
+        return true;
+      }
+      if (reconciled.refreshed && !reconciled.session) {
+        showNotice("Session is no longer active · Status refreshed");
+        return true;
+      }
       showNotice(error.message || "Unable to resume session");
       return false;
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, updateSelectedStation]);
 
   const handleBeginEnd = useCallback(async (stoppedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
@@ -286,12 +333,18 @@ function AuthenticatedApp({ access }) {
       const serverPausedAt = new Date(session.pausedAt).getTime();
       return Number.isFinite(serverPausedAt) ? serverPausedAt : stoppedAt;
     } catch (error) {
+      const reconciled = await reconcileSessionAction(sessionId, error);
+      if (reconciled.refreshed && reconciled.session?.status === "paused") {
+        const serverPausedAt = new Date(reconciled.session.pausedAt).getTime();
+        showNotice("Session paused · Status confirmed");
+        return Number.isFinite(serverPausedAt) ? serverPausedAt : stoppedAt;
+      }
       showNotice(error.message || "Unable to stop session");
       return false;
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleEnd = useCallback(async (endedAt) => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
@@ -303,6 +356,7 @@ function AuthenticatedApp({ access }) {
     if (!beginSessionAction()) return;
     try {
       const session = await endSession(sessionId, endedAt);
+      latestSessionsRef.current = latestSessionsRef.current?.filter((item) => item.id !== sessionId) ?? null;
       updateSelectedStation(resetStationSession);
       setSessionIds((current) => {
         const next = { ...current };
@@ -313,11 +367,17 @@ function AuthenticatedApp({ access }) {
       setFinishedToday((current) => current + 1);
       showNotice(`${getStationName(currentStation)} closed · Final total ${formatMoney(session.finalCost)}`);
     } catch (error) {
+      const reconciled = await reconcileSessionAction(sessionId, error);
+      if (reconciled.refreshed && !reconciled.session) {
+        setSelectedStationId(null);
+        showNotice(`${getStationName(currentStation)} closed · Status confirmed`);
+        return;
+      }
       showNotice(error.message || "Unable to end session");
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleCancel = useCallback(async () => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
@@ -339,11 +399,17 @@ function AuthenticatedApp({ access }) {
       setSelectedStationId(null);
       showNotice(`${getStationName(currentStation)} session cancelled`);
     } catch (error) {
+      const reconciled = await reconcileSessionAction(sessionId, error);
+      if (reconciled.refreshed && !reconciled.session) {
+        setSelectedStationId(null);
+        showNotice(`${getStationName(currentStation)} session status refreshed`);
+        return;
+      }
       showNotice(error.message || "Unable to cancel session");
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleViewChange = useCallback((nextView) => {
     if (nextView !== "home" && nextView !== "employees" && !access.permissions.viewAnalytics) return;
@@ -405,7 +471,7 @@ function AuthenticatedApp({ access }) {
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
           /></Suspense>
-        ) : view === "employees" && access.permissions.manageEmployees ? <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading employees"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Employees /></Suspense> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} onBack={() => handleViewChange("dashboard")} /></Suspense>}
+        ) : view === "employees" && access.permissions.manageEmployees ? <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading employees"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Employees /></Suspense> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} /></Suspense>}
       </main>
 
       {selectedStation && (

@@ -22,6 +22,45 @@ export async function getYearlySummary(year, signal) {
   return payload.data.summary;
 }
 
+export async function getBusinessAnalysis(period, parameters, signal) {
+  const payload = await apiRequest(`/business/analysis?${query({ period, ...parameters })}`, { signal });
+  return payload.data.analysis;
+}
+
+export async function getBusinessExpenses(signal) {
+  const payload = await apiRequest("/business/expenses", { signal });
+  return payload.data.expenses;
+}
+
+export async function saveBusinessExpense(values, expenseId) {
+  const payload = await apiRequest(expenseId ? `/business/expenses/${expenseId}` : "/business/expenses", {
+    method: expenseId ? "PATCH" : "POST",
+    body: JSON.stringify(values),
+  });
+  return payload.data.expense;
+}
+
+export async function deleteBusinessExpense(expenseId) {
+  await apiRequest(`/business/expenses/${expenseId}`, { method: "DELETE" });
+}
+
+export async function getBusinessTargets(signal) {
+  const payload = await apiRequest("/business/targets", { signal });
+  return payload.data.targets;
+}
+
+export async function saveBusinessTarget(values, targetId) {
+  const payload = await apiRequest(targetId ? `/business/targets/${targetId}` : "/business/targets", {
+    method: targetId ? "PATCH" : "POST",
+    body: JSON.stringify(values),
+  });
+  return payload.data.target;
+}
+
+export async function deleteBusinessTarget(targetId) {
+  await apiRequest(`/business/targets/${targetId}`, { method: "DELETE" });
+}
+
 function safeDownloadName(contentDisposition, fallbackFilename) {
   const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
   const received = match?.[1]?.replace(/[^a-zA-Z0-9._-]/g, "");

@@ -75,7 +75,7 @@ export const businessRepository = {
   async findBusiness(businessId) {
     const { data, error } = await getSupabaseDataClient()
       .from("businesses")
-      .select("id, name, timezone")
+      .select("id, name, timezone, created_at")
       .eq("id", businessId)
       .single();
     throwDatabaseError(error);

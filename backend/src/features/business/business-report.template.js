@@ -61,9 +61,9 @@ function duration(seconds) {
   return `${Math.floor(totalMinutes / 60)}h ${String(totalMinutes % 60).padStart(2, "0")}m`;
 }
 
-function periodLabel(report, copy) {
-  if (report.reportType === "daily") return `${report.summary.period.date} · ${copy.businessDay}`;
-  if (report.reportType === "monthly") return `${report.summary.period.year}-${String(report.summary.period.month).padStart(2, "0")}`;
+function periodLabel(report, copy, locale = "en-US") {
+  if (report.reportType === "daily") return dateKey(report.summary.period.date, locale);
+  if (report.reportType === "monthly") return new Intl.DateTimeFormat(locale, { timeZone: "UTC", month: "long", year: "numeric" }).format(new Date(Date.UTC(report.summary.period.year, report.summary.period.month - 1, 1)));
   return String(report.summary.period.year);
 }
 
@@ -268,26 +268,22 @@ function stackedYearChart(rows, title, { currencyCode, locale, language }) {
   return `<figure class="chart stacked-chart"><figcaption>${escapeHtml(title)}</figcaption>${legendMarkup(language)}<svg viewBox="0 0 ${frame.width} ${frame.height}" role="img" aria-label="${escapeHtml(title)}">${gridMarkup(frame, scale, (value) => compactCurrency(value, currencyCode, locale))}${bars}</svg></figure>`;
 }
 
-function categoryChart(activities, currencyCode, locale, copy, language) {
-  const maximum = Math.max(1, ...activities.map((item) => item.revenue));
-  return `<figure class="chart category-chart"><figcaption>${escapeHtml(copy.distribution)}</figcaption>${activities.map((item) => `<div class="category-bar"><span>${escapeHtml(activityTranslations[language][item.type] ?? item.label)}</span><i><b style="width:${Math.max(1, item.revenue / maximum * 100).toFixed(2)}%;background:${colors[item.type]}"></b></i><strong>${escapeHtml(currency(item.revenue, currencyCode, locale))}</strong></div>`).join("")}</figure>`;
-}
-
 function chartSection(report, copy, locale, language) {
   const currencyCode = report.summary.period.currency;
   if (report.reportType === "daily") {
     const rows = dailyConcurrencyRows(report, locale);
     const peak = rows.reduce((winner, row) => !winner || row.total > winner.total ? row : winner, null);
-    const peakLabel = peak?.total ? `${copy.peak}: ${peak.label} · ${peak.total} ${copy.sessionsField}` : "";
-    return `${lineChart(rows, copy.dailyChart, { language, valueFormatter: (value) => String(Math.round(value)), integer: true, peakLabel, xMode: "hourly" })}${categoryChart(report.summary.activities, currencyCode, locale, copy, language)}`;
+    const peakDetail = peak?.total ? `${copy.peak}: ${peak.label} · ${peak.total} ${copy.sessionsField}` : "";
+    const peakLabel = `${copy.businessDay}${peakDetail ? ` · ${peakDetail}` : ""}`;
+    return lineChart(rows, copy.dailyChart, { language, valueFormatter: (value) => String(Math.round(value)), integer: true, peakLabel, xMode: "hourly" });
   }
   if (report.reportType === "monthly") {
     const rows = monthlyRows(report, locale);
     const peak = rows.filter((row) => !row.future).reduce((winner, row) => !winner || row.total > winner.total ? row : winner, null);
     const peakLabel = peak?.total ? `${copy.peak}: ${peak.tooltip} · ${currency(peak.total, currencyCode, locale)}` : "";
-    return `${lineChart(rows, copy.monthlyChart, { language, valueFormatter: (value) => currency(value, currencyCode, locale), peakLabel })}${volumeChart(rows, copy.monthlyVolume, language)}${categoryChart(report.summary.activities, currencyCode, locale, copy, language)}`;
+    return `${lineChart(rows, copy.monthlyChart, { language, valueFormatter: (value) => currency(value, currencyCode, locale), peakLabel })}${volumeChart(rows, copy.monthlyVolume, language)}`;
   }
-  return `${stackedYearChart(yearlyRows(report, locale), copy.yearlyChart, { currencyCode, locale, language })}${categoryChart(report.summary.activities, currencyCode, locale, copy, language)}`;
+  return stackedYearChart(yearlyRows(report, locale), copy.yearlyChart, { currencyCode, locale, language });
 }
 
 function formatSessionTime(value, timezone, locale, fallback) {
@@ -318,15 +314,290 @@ function details(report, currencyCode, locale, copy, language) {
   return `<div class="table-wrap"><table><thead><tr>${headings.map((item) => `<th>${escapeHtml(item)}</th>`).join("")}</tr></thead><tbody>${rows.length ? rows.map((row) => `<tr>${row.map((item) => `<td>${escapeHtml(item)}</td>`).join("")}</tr>`).join("") : `<tr><td colspan="${headings.length}" class="empty">${escapeHtml(copy.empty)}</td></tr>`}</tbody></table></div>`;
 }
 
-function bestPeriod(report, locale, copy) {
-  if (report.reportType === "daily") {
-    const rows = dailyConcurrencyRows(report, locale);
-    const best = rows.reduce((winner, row) => !winner || row.total > winner.total ? row : winner, null);
-    return best?.total ? `${best.label} · ${best.total} ${copy.sessionsField}` : "—";
+function arabicInsight(item) {
+  const evidence = item.evidence ?? {};
+  const percent = (value) => value === null || value === undefined ? "غير متاحة" : `${value}%`;
+  const usd = (value) => `${Number(value || 0).toLocaleString("en-US")} دولار`;
+  const activity = { playstation: "البلايستيشن", billiard: "البليارد", pingpong: "البينغ بونغ" }[evidence.activity] ?? evidence.activity ?? "هذا النشاط";
+  const translations = {
+    revenue_and_sessions_down: ["انخفضت الإيرادات وعدد الجلسات", `تغيّرت الإيرادات بنسبة ${percent(evidence.revenue?.percentageDifference)}، وتغيّر عدد الجلسات المكتملة بنسبة ${percent(evidence.sessions?.percentageDifference)}. قد يكون انخفاض الجلسات أحد العوامل المحتملة.`],
+    session_value_down: ["انخفض متوسط قيمة الجلسة", `تغيّرت الإيرادات بنسبة ${percent(evidence.revenue?.percentageDifference)} مع استقرار عدد الجلسات، وتغيّر متوسط قيمة الجلسة بنسبة ${percent(evidence.averageSessionValue?.percentageDifference)}.`],
+    costs_reduced_profit: ["ارتفاع المصاريف خفّض الربح", `تغيّر صافي الربح بنسبة ${percent(evidence.profit?.percentageDifference)}، بينما بقيت الإيرادات مستقرة وتغيّرت المصاريف بنسبة ${percent(evidence.costs?.percentageDifference)}.`],
+    costs_outpaced_revenue: ["ارتفعت المصاريف أسرع من الإيرادات", `ارتفعت الإيرادات بنسبة ${percent(evidence.revenue?.percentageDifference)}، بينما تغيّر صافي الربح بنسبة ${percent(evidence.profit?.percentageDifference)}.`],
+    activity_revenue_drop: ["انخفضت إيرادات النشاط", `انخفضت إيرادات ${activity} بنسبة ${percent(evidence.revenue?.percentageDifference)} مقارنةً بالفترة السابقة المماثلة.`],
+    growth_with_stable_costs: ["نمت الإيرادات والأرباح مع استقرار المصاريف", `تغيّرت الإيرادات بنسبة ${percent(evidence.revenue?.percentageDifference)}، وصافي الربح بنسبة ${percent(evidence.profit?.percentageDifference)}، والمصاريف بنسبة ${percent(evidence.costs?.percentageDifference)}.`],
+    profit_below_target: ["قلّص الفارق المتبقي عن هدف الربح", `وصل النشاط إلى ${percent(evidence.achievement)} من هدف صافي الربح، وما زال ${usd(evidence.remaining)} للوصول إليه.`],
+    sessions_to_revenue_target: ["خطة العمل للوصول إلى هدف المبيعات", `تحتاج تقريباً إلى ${evidence.requiredSessions ?? 0} جلسة مكتملة إضافية بمتوسط ${usd(evidence.averageSessionValue)} للجلسة لتغطية ${usd(evidence.remainingRevenue)}.${evidence.daysRemaining > 0 ? ` المطلوب تقريباً ${usd(evidence.requiredDailyRevenue)} يومياً خلال ${evidence.daysRemaining} يوم عمل متبقٍ.` : ""}`],
+    revenue_below_target: ["الإيرادات أدنى من الهدف المرحلي", `الإيرادات الحالية هي ${usd(evidence.currentRevenue)} من هدف الفترة حتى الآن والبالغ ${usd(evidence.targetRevenue)}، وما زال ${usd(evidence.remaining)} للحاق بالمسار المطلوب.`],
+    margin_below_target: ["هامش الربح أدنى من الهدف", `هامش الربح الحالي هو ${percent(evidence.currentMargin)}، أي أقل بـ${evidence.gap} نقطة مئوية من الهدف.`],
+    costs_above_target: ["المصاريف تجاوزت الحد المحدد", `المصاريف أعلى بـ${usd(evidence.overage)} من الحد المحدد للفترة والبالغ ${usd(evidence.maximumCosts)}.`],
+    period_profitable: ["الفترة المحددة مربحة", `صافي الربح هو ${usd(evidence.netProfit)}، مع هامش ربح قدره ${percent(evidence.profitMargin)}.`],
+    no_material_problem: ["لم يتم رصد مشكلة جوهرية", `الإيرادات هي ${usd(evidence.revenue?.current)}، وصافي الربح ${usd(evidence.profit?.current)}، وعدد الجلسات المكتملة ${evidence.sessions?.current ?? 0}.`],
+    monitor_next_period: ["راقب الفترة المماثلة القادمة", `قارن الفترة القادمة مع الإيرادات الحالية البالغة ${usd(evidence.revenue?.current)} وعدد الجلسات المكتملة البالغ ${evidence.sessions?.current ?? 0}.`],
+  };
+  return translations[item.code] ?? [item.title, item.message];
+}
+
+function dual(language, english, arabic) {
+  return language === "ar" ? `${arabic} · ${english}` : `${english} · ${arabic}`;
+}
+
+function percent(value, digits = 2) {
+  return value === null || value === undefined ? "—" : `${Number(value).toFixed(digits)}%`;
+}
+
+function dateKey(value, locale) {
+  if (!value) return "—";
+  return new Intl.DateTimeFormat(locale, { timeZone: "UTC", dateStyle: "medium" }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function hourLabel(value, timezone, locale) {
+  if (!value) return "—";
+  const candidate = /(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : `${value}:00Z`;
+  const instant = new Date(candidate);
+  return Number.isNaN(instant.getTime()) ? "—" : new Intl.DateTimeFormat(locale, { timeZone: timezone, hour: "numeric" }).format(instant);
+}
+
+function financialValues(report) {
+  const revenue = Number(report.summary.metrics.revenue || 0);
+  return report.analysis?.financial ?? {
+    totalRevenue: revenue,
+    totalCosts: 0,
+    netProfit: revenue,
+    profitMargin: revenue ? 100 : null,
+  };
+}
+
+function businessOverviewSection(report, locale, language) {
+  const financial = financialValues(report);
+  const status = report.analysis?.statuses?.profitability
+    ?? (financial.netProfit > 0 ? "profitable" : financial.netProfit < 0 ? "loss" : "break_even");
+  const state = status === "profitable" ? ["Profit", "ربح"] : status === "loss" ? ["Loss", "خسارة"] : ["Break-even", "تعادل"];
+  const tone = status === "profitable" ? "green" : status === "loss" ? "red" : "yellow";
+  const scale = Math.max(financial.totalRevenue, financial.totalCosts, 1);
+  const salesWidth = Math.max(0, financial.totalRevenue / scale * 100);
+  const costsWidth = Math.max(0, financial.totalCosts / scale * 100);
+  const resultSign = financial.netProfit > 0 ? "+" : "";
+  const plan = report.analysis?.decisionSupport;
+  const targetProgress = plan?.hasTarget ? Math.max(0, Number(plan.revenueProgress || 0)) : null;
+  const range = report.analysis?.period;
+  const scope = range?.startDate && range?.endDateExclusive
+    ? `${dateKey(range.startDate, locale)} → ${dateKey(range.endDateExclusive, locale)}`
+    : periodLabel(report, labels[language], locale);
+  return `<section class="overview overview--${tone}">
+    <div class="panel-topline"><p class="eyebrow">${escapeHtml(dual(language, "Business snapshot", "نظرة سريعة"))}</p><p class="period-scope">◷ ${escapeHtml(scope)}</p></div>
+    <div class="overview-visual"><div class="overview-result"><span class="result-status"><i></i>${escapeHtml(dual(language, state[0], state[1]))}</span><strong>${escapeHtml(`${resultSign}${currency(financial.netProfit, report.summary.period.currency, locale)}`)}</strong><small>${escapeHtml(dual(language, "Net result", "صافي النتيجة"))}</small></div>
+      <div class="overview-bars">
+        <div class="bar-row bar-row--sales"><span>${escapeHtml(dual(language, "Sales", "المبيعات"))}</span><strong>${escapeHtml(currency(financial.totalRevenue, report.summary.period.currency, locale))}</strong><div><i style="width:${salesWidth.toFixed(2)}%"></i></div></div>
+        <div class="bar-row bar-row--costs"><span>${escapeHtml(dual(language, "Costs", "المصاريف"))}</span><strong>${escapeHtml(currency(financial.totalCosts, report.summary.period.currency, locale))}</strong><div><i style="width:${costsWidth.toFixed(2)}%"></i></div></div>
+      </div>
+    </div>
+    ${targetProgress === null ? "" : `<div class="overview-target ${targetProgress >= 100 ? "overview-target--met" : ""}"><span>${escapeHtml(dual(language, "Sales goal", "هدف المبيعات"))}</span><div><i style="width:${Math.min(100, targetProgress).toFixed(2)}%"></i></div><strong>${escapeHtml(percent(targetProgress))}</strong></div>`}
+  </section>`;
+}
+
+const expenseNames = {
+  RENT: ["Rent", "الإيجار"], ELECTRICITY: ["Electricity", "الكهرباء"],
+  EMPLOYEES: ["Employees", "الموظفون"], OTHER: ["Other", "أخرى"],
+};
+
+function expenseComparisonLabel(comparison, currencyCode, locale, language) {
+  if (!comparison) return dual(language, "Not available", "غير متاح");
+  const difference = currency(comparison.absoluteDifference, currencyCode, locale);
+  if (comparison.percentageDifference === null) return `${difference} · ${dual(language, "No percentage baseline", "لا توجد نسبة مقارنة")}`;
+  const sign = comparison.percentageDifference > 0 ? "+" : "";
+  return `${sign}${comparison.percentageDifference}% · ${difference}`;
+}
+
+function planningSection(report, locale, language) {
+  if (!report.analysis) return "";
+  const currencyCode = report.summary.period.currency;
+  const plan = report.analysis.decisionSupport;
+  const expenses = report.analysis.expenses?.breakdown ?? [];
+  const largest = expenses.reduce((winner, item) => !winner || item.amount > winner.amount ? item : winner, null);
+  const costShare = report.analysis.financial.totalRevenue > 0
+    ? report.analysis.financial.totalCosts / report.analysis.financial.totalRevenue * 100
+    : null;
+  const comparison = report.analysis.comparisons?.previousPeriod?.totalCosts;
+  let targetCard;
+  if (!plan?.hasTarget) {
+    targetCard = `<article class="target-card target-card--empty"><p class="eyebrow">${escapeHtml(dual(language, "Next decision", "القرار التالي"))}</p><h2>${escapeHtml(dual(language, "Set a monthly sales target", "حدّد هدف المبيعات الشهري"))}</h2><p>${escapeHtml(dual(language, "Add a sales target to unlock daily revenue and session guidance.", "أضف هدفاً للمبيعات لتظهر خطة المبيعات والجلسات اليومية."))}</p></article>`;
+  } else {
+    const progress = Math.max(0, Number(plan.revenueProgress || 0));
+    const completed = Number(plan.revenueRemaining || 0) <= 0;
+    const heading = completed
+      ? dual(language, "Target reached", "تم تحقيق الهدف")
+      : plan.periodClosed
+        ? dual(language, `${currency(plan.revenueRemaining, currencyCode, locale)} short when the period closed`, "قيمة النقص عند انتهاء الفترة")
+        : dual(language, `${currency(plan.revenueRemaining, currencyCode, locale)} remaining`, "متبقّي للوصول إلى الهدف");
+    targetCard = `<article class="target-card ${completed ? "target-card--complete" : ""}"><div class="target-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Sales plan", "خطة المبيعات"))}</p><h2>${escapeHtml(heading)}</h2></div><strong>${escapeHtml(percent(progress))}</strong></div><div class="target-progress"><i style="width:${Math.min(100, progress).toFixed(2)}%"></i></div><div class="target-metrics">
+      <div><span>${escapeHtml(dual(language, "Revenue needed / day", "المبيعات المطلوبة يومياً"))}</span><strong>${plan.periodClosed || plan.requiredDailyRevenue === null || plan.requiredDailyRevenue === undefined ? "—" : escapeHtml(currency(plan.requiredDailyRevenue, currencyCode, locale))}</strong></div>
+      <div><span>${escapeHtml(dual(language, "Sessions still needed", "الجلسات المتبقية تقريباً"))}</span><strong>${plan.periodClosed ? "—" : escapeHtml(plan.requiredSessions ?? "—")}</strong></div>
+      <div><span>${escapeHtml(dual(language, "Business days remaining", "أيام العمل المتبقية"))}</span><strong>${escapeHtml(plan.daysRemaining ?? "—")}</strong></div>
+    </div></article>`;
   }
-  const rows = report.reportType === "monthly" ? monthlyRows(report, locale) : yearlyRows(report, locale);
-  const best = rows.filter((row) => !row.future).reduce((winner, row) => !winner || row.total > winner.total ? row : winner, null);
-  return best?.total ? `${best.tooltip || best.label} · ${currency(best.total, report.summary.period.currency, locale)}` : "—";
+  const largestLabel = largest ? expenseNames[largest.category] ?? [largest.category, largest.category] : null;
+  const expenseCard = `<article class="expense-card"><div><p class="eyebrow">${escapeHtml(dual(language, "Cost control", "مراقبة المصاريف"))}</p><h2>${escapeHtml(dual(language, "Expense snapshot", "ملخص المصاريف"))}</h2></div><div class="expense-metrics">
+    <div><span>${escapeHtml(dual(language, "Share of revenue", "نسبتها من المبيعات"))}</span><strong>${escapeHtml(percent(costShare))}</strong></div>
+    <div><span>${escapeHtml(dual(language, "Largest category", "أكبر فئة"))}</span><strong>${largest ? `${escapeHtml(dual(language, largestLabel[0], largestLabel[1]))} · ${escapeHtml(currency(largest.amount, currencyCode, locale))}` : "—"}</strong></div>
+    <div><span>${escapeHtml(dual(language, "Change vs previous period", "مقارنة بالفترة السابقة"))}</span><strong>${escapeHtml(expenseComparisonLabel(comparison, currencyCode, locale, language))}</strong></div>
+  </div></article>`;
+  return `<section class="support-grid">${targetCard}${expenseCard}</section>`;
+}
+
+function monthlyGrowthSection(report, locale, language) {
+  const comparison = report.analysis?.comparisons?.previousPeriod?.totalRevenue;
+  if (report.reportType !== "monthly" || !comparison) return "";
+  const percentage = comparison.percentageDifference;
+  const direction = percentage === null ? "new" : comparison.direction ?? (percentage > 0 ? "up" : percentage < 0 ? "down" : "flat");
+  const value = percentage === null ? dual(language, "New", "جديد") : `${percentage > 0 ? "+" : ""}${percentage}%`;
+  const icon = direction === "up" ? "↗" : direction === "down" ? "↘" : direction === "new" ? "+" : "→";
+  return `<section class="growth-card growth-card--${escapeHtml(direction)}"><span class="growth-icon">${icon}</span><div><p class="eyebrow">${escapeHtml(dual(language, "Monthly revenue growth", "نمو المبيعات الشهري"))}</p><h2>${escapeHtml(dual(language, "Compared with the previous month", "مقارنة بالشهر السابق"))}</h2><p>${escapeHtml(currency(comparison.current, report.summary.period.currency, locale))} ${escapeHtml(dual(language, "versus", "مقابل"))} ${escapeHtml(currency(comparison.previous, report.summary.period.currency, locale))}.${report.analysis.period?.isPartial ? ` ${escapeHtml(dual(language, "The same elapsed days are compared.", "تتم مقارنة نفس عدد الأيام المنقضية."))}` : ""}</p></div><strong>${escapeHtml(value)}</strong></section>`;
+}
+
+function operationKpis(report, locale, language) {
+  const metrics = report.summary.metrics;
+  const items = report.reportType === "daily" ? [
+    ["#", dual(language, "Total Sessions", "إجمالي الجلسات"), metrics.totalSessions ?? metrics.completedSessions ?? 0, dual(language, "Completed and currently open", "المكتملة والمفتوحة حالياً")],
+    ["✓", dual(language, "Completed", "المكتملة"), metrics.completedSessions ?? 0, dual(language, "Sessions with a recorded end time", "جلسات لها وقت انتهاء")],
+    ["h", dual(language, "Total Hours", "إجمالي الساعات"), duration(metrics.totalSeconds), dual(language, "Completed usage", "مدة الاستخدام المكتملة")],
+    ["^", dual(language, "Peak Activity", "وقت الذروة"), `${metrics.peakActivity ?? 0} ${dual(language, "sessions", "جلسات")}`, metrics.peakHour ? `${dual(language, "Busiest completion hour", "ساعة الذروة")}: ${hourLabel(metrics.peakHour, report.summary.period.timezone || report.timezone, locale)}` : dual(language, "No completed traffic yet", "لا توجد حركة مكتملة")],
+  ] : [
+    ["#", dual(language, "Tracked Days", "الأيام المسجلة"), metrics.trackedDays ?? 0, dual(language, "Days with completed activity", "أيام فيها نشاط مكتمل")],
+    ["✓", dual(language, "Sessions", "الجلسات"), metrics.sessionCount ?? 0, dual(language, report.reportType === "monthly" ? "Completed this month" : "Completed this year", report.reportType === "monthly" ? "المكتملة هذا الشهر" : "المكتملة هذه السنة")],
+    ["h", dual(language, report.reportType === "monthly" ? "Monthly Hours" : "Yearly Hours", report.reportType === "monthly" ? "ساعات الشهر" : "ساعات السنة"), duration(metrics.totalSeconds), dual(language, "Combined completed usage", "إجمالي الاستخدام المكتمل")],
+  ];
+  const title = report.reportType === "daily" ? dual(language, "Today's activity", "نشاط اليوم")
+    : report.reportType === "monthly" ? dual(language, "Month activity", "نشاط الشهر") : dual(language, "Year activity", "نشاط السنة");
+  return `<section class="operations"><div class="section-heading"><p class="eyebrow">${escapeHtml(dual(language, "Operations", "التشغيل"))}</p><h2>${escapeHtml(title)}</h2></div><div class="kpis kpis--${items.length}">${items.map(([icon, label, value, description]) => `<article class="kpi"><div class="kpi-topline"><i>${escapeHtml(icon)}</i><span>${escapeHtml(label)}</span></div><strong>${escapeHtml(value)}</strong><p>${escapeHtml(description)}</p></article>`).join("")}</div></section>`;
+}
+
+function executiveSummarySection(report, locale, language) {
+  const metrics = report.summary.metrics;
+  const financial = financialValues(report);
+  const currencyCode = report.summary.period.currency;
+  const revenue = Number(financial.totalRevenue ?? metrics.revenue ?? 0);
+  const sessions = Number(metrics.completedSessions ?? metrics.sessionCount ?? 0);
+  const totalSeconds = Number(metrics.totalSeconds ?? 0);
+  const netProfit = Number(financial.netProfit ?? revenue);
+  const margin = financial.profitMargin;
+  const status = report.analysis?.statuses?.profitability
+    ?? (netProfit > 0 ? "profitable" : netProfit < 0 ? "loss" : "break_even");
+  const statusCopy = status === "profitable"
+    ? dual(language, "Profitable period", "فترة رابحة")
+    : status === "loss"
+      ? dual(language, "Loss-making period", "فترة خاسرة")
+      : dual(language, "Break-even period", "فترة تعادل");
+  const tone = status === "profitable" ? "positive" : status === "loss" ? "negative" : "neutral";
+  const target = report.analysis?.decisionSupport;
+  const context = [
+    [dual(language, "Profit margin", "هامش الربح"), percent(margin)],
+    [dual(language, "Revenue / session", "المبيعات / جلسة"), sessions ? currency(revenue / sessions, currencyCode, locale) : "—"],
+    ...(target?.hasTarget ? [[dual(language, "Sales target", "هدف المبيعات"), percent(target.revenueProgress)]] : []),
+  ];
+  const keyFigures = [
+    [dual(language, "Revenue", "المبيعات"), currency(revenue, currencyCode, locale)],
+    [dual(language, "Net profit", "صافي الربح"), currency(netProfit, currencyCode, locale)],
+    [dual(language, "Completed sessions", "الجلسات المكتملة"), String(sessions)],
+    [dual(language, "Playing time", "وقت اللعب"), duration(totalSeconds)],
+  ];
+
+  return `<section class="executive-summary">
+    <div class="executive-summary__heading"><div><p class="eyebrow">${escapeHtml(dual(language, "At a glance", "نظرة سريعة"))}</p><h2>${escapeHtml(dual(language, "Key figures", "الأرقام الأساسية"))}</h2></div><span class="summary-status summary-status--${tone}">${escapeHtml(statusCopy)}</span></div>
+    <div class="key-figures">${keyFigures.map(([label, value], index) => `<article class="key-figure${index === 1 ? ` key-figure--${tone}` : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></article>`).join("")}</div>
+    <div class="summary-context">${context.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div>
+  </section>`;
+}
+
+function activityComparisonSection(report, locale, language) {
+  const activities = report.summary.activities ?? [];
+  const totalRevenue = Number(report.summary.metrics.revenue || 0);
+  const totalSessions = Number(report.summary.metrics.completedSessions ?? report.summary.metrics.sessionCount ?? 0);
+  const totalSeconds = Number(report.summary.metrics.totalSeconds || 0);
+  const headings = [dual(language, "Activity", "النشاط"), dual(language, "Sessions", "الجلسات"), dual(language, "Hours", "الساعات"), dual(language, "Sales", "المبيعات"), dual(language, "Avg. session", "متوسط الجلسة"), dual(language, "Sales / hour", "المبيعات / ساعة"), dual(language, "Share", "الحصة")];
+  const rows = activities.map((item) => {
+    const hours = Number(item.hours ?? Number(item.totalSeconds || 0) / 3600);
+    return [
+      `<span class="activity-name"><i style="background:${colors[item.type]}"></i>${escapeHtml(activityTranslations[language][item.type] ?? item.label)}</span>`,
+      escapeHtml(item.sessions), escapeHtml(`${hours.toFixed(2)}h`), escapeHtml(currency(item.revenue, report.summary.period.currency, locale)),
+      item.sessions ? escapeHtml(currency(item.revenue / item.sessions, report.summary.period.currency, locale)) : "—",
+      hours ? escapeHtml(currency(item.revenue / hours, report.summary.period.currency, locale)) : "—",
+      totalRevenue ? `${(item.revenue / totalRevenue * 100).toFixed(1)}%` : "—",
+    ];
+  });
+  const totalHours = totalSeconds / 3600;
+  rows.push([
+    `<strong>${escapeHtml(dual(language, "All Activities", "كل الأنشطة"))}</strong>`, totalSessions, `${totalHours.toFixed(2)}h`, escapeHtml(currency(totalRevenue, report.summary.period.currency, locale)),
+    totalSessions ? escapeHtml(currency(totalRevenue / totalSessions, report.summary.period.currency, locale)) : "—",
+    totalHours ? escapeHtml(currency(totalRevenue / totalHours, report.summary.period.currency, locale)) : "—", totalRevenue ? "100%" : "—",
+  ]);
+  return `<section class="panel activity-comparison"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Performance mix", "مزيج الأداء"))}</p><h2>${escapeHtml(dual(language, "Activity comparison", "مقارنة الأنشطة"))}</h2></div><p>${escapeHtml(dual(language, "Sales, demand and efficiency by activity.", "المبيعات والطلب والكفاءة بحسب النشاط."))}</p></div><div class="table-wrap"><table><thead><tr>${headings.map((item) => `<th>${escapeHtml(item)}</th>`).join("")}</tr></thead><tbody>${rows.map((row, index) => `<tr${index === rows.length - 1 ? " class=\"total-row\"" : ""}>${row.map((item, column) => `<${column === 0 ? "th" : "td"}>${item}</${column === 0 ? "th" : "td"}>`).join("")}</tr>`).join("")}</tbody></table></div></section>`;
+}
+
+function activityMixSection(report, locale, language) {
+  const activities = report.summary.activities ?? [];
+  const totalRevenue = Number(report.summary.metrics.revenue || 0);
+  const rows = activities.map((item) => {
+    const itemRevenue = Number(item.revenue || 0);
+    const share = totalRevenue > 0 ? itemRevenue / totalRevenue * 100 : 0;
+    const hours = Number(item.hours ?? Number(item.totalSeconds || 0) / 3600);
+    return `<article class="activity-mix__row">
+      <div class="activity-mix__identity"><i style="background:${colors[item.type]}"></i><strong>${escapeHtml(activityTranslations[language][item.type] ?? item.label)}</strong><span>${escapeHtml(`${Number(item.sessions || 0)} ${dual(language, "sessions", "جلسات")} · ${hours.toFixed(1)}h`)}</span></div>
+      <div class="activity-mix__value"><strong>${escapeHtml(currency(itemRevenue, report.summary.period.currency, locale))}</strong><span>${share.toFixed(1)}%</span></div>
+      <div class="activity-mix__bar"><i style="width:${share.toFixed(2)}%;background:${colors[item.type]}"></i></div>
+    </article>`;
+  });
+  return `<section class="panel activity-mix"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Revenue mix", "توزيع المبيعات"))}</p><h2>${escapeHtml(dual(language, "Activity mix", "مزيج الأنشطة"))}</h2></div><p>${escapeHtml(dual(language, "Revenue share and demand by activity.", "حصة المبيعات والطلب بحسب النشاط."))}</p></div><div class="activity-mix__list">${rows.join("") || `<p class="empty">${escapeHtml(dual(language, "No activity recorded", "لا يوجد نشاط مسجل"))}</p>`}</div></section>`;
+}
+
+function periodOverviewSection(report, locale, language) {
+  const currencyCode = report.summary.period.currency;
+  if (report.reportType === "monthly") {
+    const days = report.summary.days ?? [];
+    const firstDay = new Date(Date.UTC(report.summary.period.year, report.summary.period.month - 1, 1));
+    const leading = (firstDay.getUTCDay() + 6) % 7;
+    const cells = [...Array.from({ length: leading }, () => null), ...days];
+    const weekdays = language === "ar" ? ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"] : ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    return `<section class="panel calendar-panel"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Day-by-day", "يوماً بيوم"))}</p><h2>${escapeHtml(dual(language, "Daily totals calendar", "تقويم الإجماليات اليومية"))}</h2></div><p>${escapeHtml(dual(language, "Sales and completed playing time for each day.", "المبيعات ووقت اللعب المكتمل لكل يوم."))}</p></div><div class="calendar">${weekdays.map((day) => `<strong class="weekday">${escapeHtml(day)}</strong>`).join("")}${cells.map((day) => day ? `<div class="calendar-day ${day.total.sessions ? "has-activity" : ""}"><b>${Number(day.key.slice(-2))}</b>${day.total.sessions ? `<strong>${escapeHtml(currency(day.total.revenue, currencyCode, locale))}</strong><small>${escapeHtml(duration(day.total.totalSeconds))}</small>` : `<small>${escapeHtml(dual(language, "No activity", "لا نشاط"))}</small>`}</div>` : `<div class="calendar-day calendar-day--empty"></div>`).join("")}</div></section>`;
+  }
+  if (report.reportType === "yearly") {
+    const months = report.summary.months ?? [];
+    return `<section class="panel year-grid-panel"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Year at a glance", "السنة بنظرة سريعة"))}</p><h2>${escapeHtml(dual(language, "Monthly summary", "الملخص الشهري"))}</h2></div><p>${escapeHtml(dual(language, "Sales, hours and sessions by month.", "المبيعات والساعات والجلسات بحسب الشهر."))}</p></div><div class="month-grid">${months.map((month, index) => `<article><span>${escapeHtml(monthName(report.summary.period.year, index + 1, locale))}</span><strong>${escapeHtml(currency(month.total.revenue, currencyCode, locale))}</strong><small>${escapeHtml(duration(month.total.totalSeconds))} · ${month.total.sessions} ${escapeHtml(dual(language, "sessions", "جلسات"))}</small><div>${series.map((item) => `<i style="background:${colors[item.key]}"></i><b>${escapeHtml(compactCurrency(activityMetric(month, item.key, "revenue"), currencyCode, locale))}</b>`).join("")}</div></article>`).join("")}</div></section>`;
+  }
+  return "";
+}
+
+function insightsSection(report, language) {
+  const insights = report.analysis?.insights ?? [];
+  if (!insights.length) return "";
+  const groups = [
+    ["positive", "Positive Indicators", "مؤشرات إيجابية", "✓"],
+    ["warning", "Problems Detected", "مشاكل مكتشفة", "!"],
+    ["recommendation", "Recommendations", "توصيات", "→"],
+  ];
+  return `<section class="panel insights"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Deterministic analysis", "تحليل رقمي ثابت"))}</p><h2>${escapeHtml(dual(language, "Evidence-based insights", "تحليلات مبنية على الأرقام"))}</h2></div><p>${escapeHtml(dual(language, "Rules use the selected and previous equivalent periods.", "تعتمد القواعد على الفترة المحددة والفترة السابقة المماثلة."))}</p></div><div class="insight-grid">${groups.map(([type, english, arabic, icon]) => {
+    const rows = insights.filter((item) => item.type === type);
+    return `<article class="insight-column insight-column--${type}"><div class="insight-heading"><i>${icon}</i><h3>${escapeHtml(dual(language, english, arabic))}</h3><span>${rows.length}</span></div><div class="insight-cards">${rows.map((item) => {
+      const translated = arabicInsight(item);
+      const primary = language === "ar" ? translated : [item.title, item.message];
+      const secondary = language === "ar" ? [item.title, item.message] : translated;
+      return `<div><strong>${escapeHtml(primary[0])}</strong><p>${escapeHtml(primary[1])}</p><strong class="secondary-title">${escapeHtml(secondary[0])}</strong><p class="secondary-copy">${escapeHtml(secondary[1])}</p></div>`;
+    }).join("")}</div></article>`;
+  }).join("")}</div></section>`;
+}
+
+function keyTakeawaysSection(report, language) {
+  const priorities = { warning: 0, recommendation: 1, positive: 2 };
+  const insights = [...(report.analysis?.insights ?? [])]
+    .sort((left, right) => (priorities[left.type] ?? 3) - (priorities[right.type] ?? 3))
+    .slice(0, 3);
+  if (!insights.length) return "";
+  return `<section class="panel takeaways"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "What matters", "الأهم"))}</p><h2>${escapeHtml(dual(language, "Key takeaways", "أهم الملاحظات"))}</h2></div><p>${escapeHtml(dual(language, "Up to three points that need attention.", "حتى ثلاث نقاط تستحق الانتباه."))}</p></div><div class="takeaway-list">${insights.map((item) => {
+    const translated = arabicInsight(item);
+    const [title, message] = language === "ar" ? translated : [item.title, item.message];
+    const icon = item.type === "warning" ? "!" : item.type === "recommendation" ? "→" : "✓";
+    return `<article class="takeaway takeaway--${escapeHtml(item.type)}"><i>${icon}</i><div><strong>${escapeHtml(title)}</strong><p>${escapeHtml(message)}</p></div></article>`;
+  }).join("")}</div></section>`;
 }
 
 export function createReportDocument(report) {
@@ -335,46 +606,98 @@ export function createReportDocument(report) {
   const copy = labels[language];
   const direction = language === "ar" ? "rtl" : "ltr";
   const summary = report.summary;
-  const metrics = summary.metrics;
-  const completedSessions = Number(metrics.completedSessions ?? metrics.sessionCount ?? 0);
-  const totalSeconds = Number(metrics.totalSeconds || 0);
-  const revenue = Number(metrics.revenue || 0);
-  const average = completedSessions ? revenue / completedSessions : 0;
-  const reportPeriod = periodLabel(report, copy);
+  const sections = report.sections ?? { summary: true, charts: false, categoryBreakdown: true, detailsTable: false };
+  const palette = {
+    background: "#ffffff", surface: "#ffffff", surfaceSoft: "#f6f8f7", text: "#18211b", textSoft: "#46534a",
+    muted: "#6d786f", border: "#dce3dd", accent: "#347a59", accentDeep: "#285f45", danger: "#bf514c", yellow: "#a77919", blue: "#557e9f",
+  };
+  const reportPeriod = periodLabel(report, copy, locale);
   const generatedAt = new Intl.DateTimeFormat(locale, { timeZone: report.timezone, dateStyle: "medium", timeStyle: "short" }).format(report.generatedAt);
   const title = report.title || `${report.reportType[0].toUpperCase()}${report.reportType.slice(1)} Business Report`;
-  const kpis = [
-    [copy.revenue, currency(revenue, summary.period.currency, locale)],
-    [copy.sessions, completedSessions],
-    [copy.hours, duration(totalSeconds)],
-    [copy.average, currency(average, summary.period.currency, locale)],
-    [copy.best, bestPeriod(report, locale, copy)],
-  ];
-  const totalRevenue = Math.max(0, revenue);
   const html = `<!doctype html><html lang="${language}" dir="${direction}"><head><meta charset="utf-8"><style>
-    @page { size: A4; margin: 16mm 12mm 20mm; } * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    body { margin:0; color:#1c251f; font:12px/1.45 "Noto Sans Arabic", "DejaVu Sans", Arial, sans-serif; background:#fff; }
-    header { display:flex; justify-content:space-between; gap:24px; border-bottom:3px solid #355b42; padding-bottom:14px; margin-bottom:18px; }
-    .brand { color:#355b42; font-size:20px; font-weight:800; } h1 { margin:5px 0 2px; font-size:25px; } .meta { text-align:${direction === "rtl" ? "left" : "right"}; color:#536158; }
-    section { margin:18px 0; break-inside:avoid; } .charts-section { break-inside:auto; } h2 { margin:0 0 10px; color:#355b42; font-size:16px; }
-    .kpis { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; } .kpi { min-height:72px; padding:11px; border:1px solid #d9e1db; border-radius:7px; background:#f4f7f4; break-inside:avoid; }
-    .kpi span { display:block; color:#667269; font-size:10px; } .kpi strong { display:block; margin-top:6px; font-size:16px; }
-    .activity { display:grid; grid-template-columns:repeat(3,1fr); gap:9px; } .activity-card { border-top:4px solid; padding:10px; background:#f6f8f6; break-inside:avoid; }
-    .activity-card h3 { margin:0 0 7px; font-size:13px; } .activity-card dl { margin:0; display:grid; grid-template-columns:1fr auto; gap:3px 8px; } dt { color:#68736b; } dd { margin:0; font-weight:700; }
-    .charts { display:grid; gap:12px; } .chart { margin:0; padding:12px; border:1px solid #d9e1db; border-radius:7px; break-inside:avoid; } figcaption { display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; color:#355b42; font-weight:800; } figcaption small { color:#65736c; font-weight:600; }
-    .chart-legend { display:flex; flex-wrap:wrap; gap:14px; margin:2px 0 5px; color:#59675f; font-size:9px; } .chart-legend span { display:inline-flex; align-items:center; gap:5px; } .chart-legend i { width:8px; height:8px; border-radius:50%; }
-    svg { display:block; width:100%; height:auto; } svg text { fill:#5d6960; font:9px "DejaVu Sans",Arial,sans-serif; } svg .bar-total { fill:#26382f; font-size:8px; font-weight:700; } svg .future-mark { fill:#8a948c; font-size:13px; }
-    .category-bar { display:grid; grid-template-columns:100px 1fr 100px; gap:8px; align-items:center; margin:8px 0; } .category-bar i { height:10px; overflow:hidden; border-radius:5px; background:#e2e7e3; } .category-bar b { display:block; height:100%; border-radius:5px; }
-    .notes { padding:12px; border-inline-start:4px solid ${colors.playstation}; background:#f4f7f4; white-space:pre-wrap; }
-    .table-wrap { break-inside:auto; overflow-wrap:anywhere; } table { width:100%; border-collapse:collapse; font-size:9px; } thead { display:table-header-group; } tr { break-inside:avoid; } th { color:#fff; background:#355b42; text-align:start; } th,td { padding:6px 7px; border:1px solid #dce2dd; } tbody tr:nth-child(even) td { background:#f5f7f5; } .empty { padding:20px; text-align:center; color:#667269; }
+    @page { size:A4; margin:13mm 11mm 18mm; }
+    * { box-sizing:border-box; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    html { background:#fff; }
+    body { margin:0; color:${palette.text}; font:11px/1.5 "Noto Sans Arabic","DejaVu Sans",Arial,sans-serif; background:#fff; }
+    @media print { html,body { background:#fff !important; } }
+    .report-header { display:flex; align-items:flex-end; justify-content:space-between; gap:24px; margin:0 0 18px; padding:0 2px 16px; border-bottom:1px solid ${palette.border}; break-inside:avoid; }
+    .eyebrow { margin:0; color:${palette.accent}; font-size:8px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; }
+    h1 { margin:3px 0 0; font-size:28px; line-height:1.1; letter-spacing:-.035em; } h2,h3,p { margin-top:0; }
+    .report-subtitle { margin:6px 0 0; color:${palette.textSoft}; font-size:11px; } .report-period { margin:2px 0 0; color:${palette.muted}; }
+    .meta { display:grid; gap:3px; max-width:235px; color:${palette.muted}; text-align:${direction === "rtl" ? "left" : "right"}; font-size:9px; }
+    .meta strong { color:${palette.text}; font-size:13px; }
+    section { margin:14px 0; } .panel,.overview,.growth-card,.support-grid article { border:1px solid ${palette.border}; background:${palette.surface}; break-inside:avoid; }
+    .panel,.overview { padding:16px; border-radius:12px; } .panel-topline,.panel-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:20px; }
+    .panel-heading { margin-bottom:13px; padding-bottom:11px; border-bottom:1px solid ${palette.border}; } .panel-heading h2,.section-heading h2 { margin:3px 0 0; color:${palette.text}; font-size:15px; }
+    .panel-heading > p { max-width:300px; margin:0; color:${palette.muted}; font-size:9px; text-align:${direction === "rtl" ? "left" : "right"}; }
+    .period-scope { margin:0; color:${palette.muted}; font-size:9px; }
+    .overview { --result:${palette.yellow}; box-shadow:inset ${direction === "rtl" ? "-4px" : "4px"} 0 0 var(--result); }
+    .overview--green { --result:${palette.accent}; } .overview--red { --result:${palette.danger}; }
+    .overview-visual { display:grid; grid-template-columns:.72fr 1.28fr; align-items:center; gap:28px; margin-top:14px; }
+    .overview-result { display:flex; align-items:flex-start; flex-direction:column; } .result-status { display:inline-flex; align-items:center; gap:7px; color:var(--result); font-size:9px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+    .result-status i { width:8px; height:8px; border-radius:50%; background:currentColor; box-shadow:0 0 0 4px color-mix(in srgb,currentColor 13%,transparent); }
+    .overview-result > strong { margin-top:7px; color:var(--result); font-size:28px; line-height:1; letter-spacing:-.04em; } .overview-result small { margin-top:7px; color:${palette.muted}; }
+    .overview-bars { display:grid; gap:12px; } .bar-row { display:grid; grid-template-columns:1fr auto; gap:4px 14px; } .bar-row span { color:${palette.textSoft}; } .bar-row > strong { font-size:12px; }
+    .bar-row > div,.overview-target > div,.target-progress { overflow:hidden; border-radius:999px; background:#e9eeea; }
+    .bar-row > div { grid-column:1/-1; height:8px; } .bar-row i,.overview-target i,.target-progress i { display:block; height:100%; border-radius:inherit; }
+    .bar-row--sales i { background:linear-gradient(90deg,#8063cc,${colors.playstation}); } .bar-row--costs i { background:linear-gradient(90deg,#9e4944,${palette.danger}); }
+    .overview-target { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; margin-top:14px; padding-top:12px; border-top:1px solid ${palette.border}; color:${palette.muted}; font-size:9px; }
+    .overview-target > div { height:6px; } .overview-target i { background:${palette.yellow}; } .overview-target strong { color:${palette.yellow}; font-size:11px; } .overview-target--met i { background:${palette.accent}; } .overview-target--met strong { color:${palette.accent}; }
+    .support-grid { display:grid; grid-template-columns:1.35fr .65fr; align-items:stretch; gap:11px; break-inside:avoid; }
+    .support-grid article { margin:0; padding:15px; border-radius:11px; } .target-card { border-color:color-mix(in srgb,${palette.accent} 35%,${palette.border}) !important; background:linear-gradient(135deg,color-mix(in srgb,${palette.accent} 8%,${palette.surface}),${palette.surface}) !important; }
+    .target-card h2,.expense-card h2 { margin:3px 0 0; font-size:14px; } .target-card--empty > p:last-child { margin:10px 0 0; color:${palette.muted}; font-size:9px; }
+    .target-heading { display:flex; align-items:flex-end; justify-content:space-between; gap:16px; } .target-heading > strong { color:${palette.accent}; font-size:20px; } .target-progress { height:7px; margin:13px 0; } .target-progress i { background:linear-gradient(90deg,${palette.accentDeep},${palette.accent}); }
+    .target-metrics { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; } .target-metrics div { padding:9px; border:1px solid ${palette.border}; border-radius:8px; background:color-mix(in srgb,${palette.background} 45%,transparent); }
+    .target-metrics span,.expense-metrics span { display:block; color:${palette.muted}; font-size:8px; } .target-metrics strong,.expense-metrics strong { display:block; margin-top:5px; font-size:11px; }
+    .expense-card { display:flex; flex-direction:column; gap:10px; } .expense-metrics { display:grid; flex:1; } .expense-metrics > div { padding:8px 4px; border-top:1px solid ${palette.border}; }
+    .growth-card { --growth:${palette.muted}; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:13px; padding:13px 15px; border-radius:11px; background:linear-gradient(100deg,color-mix(in srgb,var(--growth) 8%,${palette.surface}),${palette.surface}); }
+    .growth-card--up { --growth:${palette.accent}; } .growth-card--down { --growth:${palette.danger}; } .growth-card--new { --growth:${palette.blue}; } .growth-icon { display:grid; width:34px; height:34px; place-items:center; border:1px solid color-mix(in srgb,var(--growth) 42%,transparent); border-radius:9px; color:var(--growth); background:color-mix(in srgb,var(--growth) 9%,transparent); font-size:16px; font-weight:800; }
+    .growth-card h2 { margin:2px 0 3px; font-size:13px; } .growth-card p:not(.eyebrow) { margin:0; color:${palette.muted}; font-size:8px; } .growth-card > strong { color:var(--growth); font-size:21px; }
+    .section-heading { margin:18px 0 9px; } .kpis { display:grid; gap:9px; } .kpis--3 { grid-template-columns:repeat(3,1fr); } .kpis--4 { grid-template-columns:repeat(4,1fr); }
+    .kpi { min-height:100px; padding:13px; border:1px solid ${palette.border}; border-radius:11px; background:linear-gradient(145deg,color-mix(in srgb,#fff 3%,${palette.surface}),${palette.surface}); break-inside:avoid; }
+    .kpi-topline { display:flex; align-items:center; gap:7px; color:${palette.textSoft}; font-size:8px; font-weight:700; text-transform:uppercase; } .kpi-topline i { display:grid; width:21px; height:21px; place-items:center; border:1px solid ${palette.border}; border-radius:6px; color:${palette.accent}; font-style:normal; }
+    .kpi > strong { display:block; margin-top:10px; font-size:18px; letter-spacing:-.03em; } .kpi > p { margin:4px 0 0; color:${palette.muted}; font-size:8px; }
+    .executive-summary { margin-top:0; padding:17px; border:1px solid ${palette.border}; border-top:4px solid ${palette.accent}; border-radius:12px; background:#fff; break-inside:avoid; }
+    .executive-summary__heading { display:flex; align-items:center; justify-content:space-between; gap:18px; margin-bottom:13px; }
+    .executive-summary__heading h2 { margin:3px 0 0; font-size:16px; }
+    .summary-status { padding:5px 9px; border:1px solid ${palette.border}; border-radius:999px; color:${palette.muted}; background:${palette.surfaceSoft}; font-size:8px; font-weight:800; }
+    .summary-status--positive { color:${palette.accentDeep}; border-color:#bcd8cb; background:#eef7f2; } .summary-status--negative { color:${palette.danger}; border-color:#e8c6c2; background:#fff3f1; }
+    .key-figures { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid ${palette.border}; border-radius:10px; overflow:hidden; }
+    .key-figure { min-height:72px; padding:12px; border-inline-end:1px solid ${palette.border}; background:#fff; } .key-figure:last-child { border-inline-end:0; }
+    .key-figure span { display:block; color:${palette.muted}; font-size:8px; font-weight:700; } .key-figure strong { display:block; margin-top:8px; font-size:17px; line-height:1.1; letter-spacing:-.025em; }
+    .key-figure--positive strong { color:${palette.accentDeep}; } .key-figure--negative strong { color:${palette.danger}; }
+    .summary-context { display:flex; flex-wrap:wrap; gap:0 22px; margin-top:12px; padding-top:10px; border-top:1px solid ${palette.border}; }
+    .summary-context div { display:flex; align-items:baseline; gap:7px; } .summary-context span { color:${palette.muted}; font-size:8px; } .summary-context strong { font-size:9px; }
+    .activity-mix__list { display:grid; gap:10px; } .activity-mix__row { display:grid; grid-template-columns:1fr auto; gap:6px 16px; padding:9px 0; border-bottom:1px solid ${palette.border}; break-inside:avoid; } .activity-mix__row:last-child { border-bottom:0; }
+    .activity-mix__identity { display:grid; grid-template-columns:auto 1fr; align-items:center; gap:2px 7px; } .activity-mix__identity i { grid-row:1/3; width:9px; height:9px; border-radius:50%; } .activity-mix__identity strong { font-size:10px; } .activity-mix__identity span { color:${palette.muted}; font-size:8px; }
+    .activity-mix__value { display:flex; align-items:baseline; gap:8px; } .activity-mix__value strong { font-size:11px; } .activity-mix__value span { min-width:42px; color:${palette.muted}; text-align:end; font-size:8px; }
+    .activity-mix__bar { grid-column:1/-1; overflow:hidden; height:5px; border-radius:999px; background:#e9eeea; } .activity-mix__bar i { display:block; min-width:0; height:100%; border-radius:inherit; }
+    .takeaway-list { display:grid; gap:8px; } .takeaway { --takeaway:${palette.accent}; display:grid; grid-template-columns:auto 1fr; gap:10px; padding:10px; border:1px solid ${palette.border}; border-inline-start:3px solid var(--takeaway); border-radius:8px; background:${palette.surfaceSoft}; break-inside:avoid; }
+    .takeaway--warning { --takeaway:${palette.yellow}; } .takeaway--recommendation { --takeaway:${palette.blue}; } .takeaway > i { display:grid; width:22px; height:22px; place-items:center; border-radius:6px; color:var(--takeaway); background:#fff; font-style:normal; font-weight:800; } .takeaway strong { font-size:9px; } .takeaway p { margin:3px 0 0; color:${palette.muted}; font-size:8px; }
+    .table-wrap { break-inside:auto; overflow-wrap:anywhere; } table { width:100%; border-collapse:collapse; font-size:8px; } thead { display:table-header-group; } tr { break-inside:avoid; }
+    th { text-align:start; } th,td { padding:7px 6px; border:1px solid ${palette.border}; } thead th { color:#fff; background:${palette.accentDeep}; } tbody tr:nth-child(even) th,tbody tr:nth-child(even) td { background:${palette.surfaceSoft}; } .total-row th,.total-row td { font-weight:800; background:color-mix(in srgb,${palette.accent} 8%,${palette.surface}) !important; }
+    .activity-name { display:inline-flex; align-items:center; gap:6px; } .activity-name i { width:8px; height:8px; border-radius:50%; }
+    .calendar { display:grid; grid-template-columns:repeat(7,1fr); gap:5px; } .weekday { padding:3px; color:${palette.muted}; text-align:center; font-size:8px; }
+    .calendar-day { min-height:58px; padding:7px; border:1px solid ${palette.border}; border-radius:7px; background:${palette.surfaceSoft}; } .calendar-day > b { display:block; color:${palette.muted}; } .calendar-day > strong { display:block; margin-top:8px; font-size:9px; } .calendar-day small { display:block; margin-top:3px; color:${palette.muted}; font-size:7px; } .calendar-day.has-activity { background:color-mix(in srgb,${palette.accent} 8%,${palette.surface}); } .calendar-day--empty { border-style:dashed; opacity:.35; }
+    .month-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:7px; } .month-grid article { padding:10px; border:1px solid ${palette.border}; border-radius:8px; background:${palette.surfaceSoft}; break-inside:avoid; } .month-grid article > span,.month-grid article > small { display:block; color:${palette.muted}; } .month-grid article > strong { display:block; margin:4px 0; font-size:14px; } .month-grid article > div { display:grid; grid-template-columns:auto 1fr auto 1fr auto 1fr; align-items:center; gap:4px; margin-top:8px; font-size:7px; } .month-grid i { width:6px; height:6px; border-radius:50%; }
+    .charts-section { padding:16px; border:1px solid ${palette.border}; border-radius:12px; background:${palette.surface}; break-inside:auto; } .charts { display:grid; gap:10px; }
+    .chart { margin:0; padding:11px; border:1px solid ${palette.border}; border-radius:9px; background:${palette.surfaceSoft}; break-inside:avoid; } figcaption { display:flex; justify-content:space-between; gap:12px; margin-bottom:6px; color:${palette.text}; font-weight:800; } figcaption small { color:${palette.muted}; font-weight:600; }
+    .chart-legend { display:flex; flex-wrap:wrap; gap:14px; margin:2px 0 5px; color:${palette.muted}; font-size:8px; } .chart-legend span { display:inline-flex; align-items:center; gap:5px; } .chart-legend i { width:8px; height:8px; border-radius:50%; }
+    svg { display:block; width:100%; height:auto; } svg text { fill:${palette.muted}; font:9px "DejaVu Sans",Arial,sans-serif; } svg .bar-total { fill:${palette.text}; font-size:8px; font-weight:700; } svg .future-mark { fill:${palette.muted}; font-size:13px; }
+    .notes-panel { padding:14px; border-inline-start:4px solid ${colors.playstation}; border-radius:8px; background:${palette.surface}; white-space:pre-wrap; break-inside:avoid; }
+    .insights { break-inside:auto; } .insight-grid { display:grid; grid-template-columns:repeat(3,1fr); align-items:start; gap:9px; }
+    .insight-column { --insight:${palette.accent}; padding:9px; border:1px solid ${palette.border}; border-top:3px solid var(--insight); border-radius:9px; background:${palette.surfaceSoft}; break-inside:avoid; } .insight-column--warning { --insight:${palette.yellow}; } .insight-column--recommendation { --insight:${palette.blue}; }
+    .insight-heading { display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:6px; margin-bottom:8px; } .insight-heading i { display:grid; width:23px; height:23px; place-items:center; border-radius:6px; color:var(--insight); background:color-mix(in srgb,var(--insight) 10%,transparent); font-style:normal; font-weight:800; } .insight-heading h3 { margin:0; font-size:9px; } .insight-heading > span { color:var(--insight); }
+    .insight-cards { display:grid; gap:7px; } .insight-cards > div { padding:9px; border:1px solid ${palette.border}; border-radius:7px; background:${palette.surface}; } .insight-cards strong { display:block; font-size:8px; } .insight-cards p { margin:4px 0 0; color:${palette.muted}; font-size:7px; } .secondary-title { margin-top:7px; padding-top:7px; border-top:1px solid ${palette.border}; color:var(--insight); } .empty { padding:20px; color:${palette.muted}; text-align:center; }
   </style></head><body>
-    <header><div><div class="brand">${escapeHtml(report.business.name || "Lounge")}</div><h1>${escapeHtml(title)}</h1><div>${escapeHtml(reportPeriod)}</div></div><div class="meta"><div>${escapeHtml(generatedAt)}</div><div>${escapeHtml(summary.period.currency)}</div><div>${escapeHtml(copy.generated)}</div></div></header>
-    ${report.sections.summary ? `<section><h2>${escapeHtml(copy.revenue)} & KPIs</h2><div class="kpis">${kpis.map(([label, value]) => `<div class="kpi"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong></div>`).join("")}</div></section>` : ""}
-    ${report.sections.categoryBreakdown ? `<section><h2>${escapeHtml(copy.category)}</h2><div class="activity">${summary.activities.map((item) => `<article class="activity-card" style="border-color:${colors[item.type]}"><h3>${escapeHtml(activityTranslations[language][item.type] ?? item.label)}</h3><dl><dt>${escapeHtml(copy.revenueField)}</dt><dd>${escapeHtml(currency(item.revenue, summary.period.currency, locale))}</dd><dt>${escapeHtml(copy.sessionsField)}</dt><dd>${item.sessions}</dd><dt>${escapeHtml(copy.hoursField)}</dt><dd>${escapeHtml(duration(item.totalSeconds))}</dd><dt>${escapeHtml(copy.share)}</dt><dd>${totalRevenue ? (item.revenue / totalRevenue * 100).toFixed(1) : "0.0"}%</dd></dl></article>`).join("")}</div></section>` : ""}
-    ${report.sections.charts ? `<section class="charts-section"><h2>${escapeHtml(copy.charts)}</h2><div class="charts">${chartSection(report, copy, locale, language)}</div></section>` : ""}
-    ${report.notes ? `<section><h2>${escapeHtml(copy.notes)}</h2><div class="notes">${escapeHtml(report.notes)}</div></section>` : ""}
-    ${report.sections.detailsTable ? `<section><h2>${escapeHtml(copy.details)}</h2>${details(report, summary.period.currency, locale, copy, language)}</section>` : ""}
+    <header class="report-header"><div><p class="eyebrow">${escapeHtml(dual(language, "Business report", "تقرير الأعمال"))}</p><h1>${escapeHtml(dual(language, "Executive summary", "الملخص التنفيذي"))}</h1><p class="report-subtitle">${escapeHtml(title)}</p><p class="report-period">${escapeHtml(reportPeriod)}</p></div><div class="meta"><strong>${escapeHtml(report.business.name || "Lounge")}</strong><span>${escapeHtml(generatedAt)}</span><span>${escapeHtml(summary.period.currency)} · ${escapeHtml(copy.generated)}</span></div></header>
+    ${sections.summary ? executiveSummarySection(report, locale, language) : ""}
+    ${sections.categoryBreakdown ? activityMixSection(report, locale, language) : ""}
+    ${sections.charts ? `${periodOverviewSection(report, locale, language)}<section class="charts-section"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Performance", "الأداء"))}</p><h2>${escapeHtml(dual(language, "Business charts", "مخططات العمل"))}</h2></div></div><div class="charts">${chartSection(report, copy, locale, language)}</div></section>` : ""}
+    ${report.notes ? `<section><div class="section-heading"><p class="eyebrow">${escapeHtml(copy.notes)}</p><h2>${escapeHtml(dual(language, "Owner notes", "ملاحظات المالك"))}</h2></div><div class="notes-panel">${escapeHtml(report.notes)}</div></section>` : ""}
+    ${sections.detailsTable ? `<section class="panel"><div class="panel-heading"><div><p class="eyebrow">${escapeHtml(dual(language, "Records", "السجلات"))}</p><h2>${escapeHtml(copy.details)}</h2></div></div>${details(report, summary.period.currency, locale, copy, language)}</section>` : ""}
+    ${sections.summary ? keyTakeawaysSection(report, language) : ""}
   </body></html>`;
-  const footerTemplate = `<div style="width:100%;font:8px Arial,sans-serif;color:#68736b;padding:0 12mm;display:flex;justify-content:space-between"><span>${escapeHtml(copy.confidential)}</span><span>${escapeHtml(reportPeriod)} · ${escapeHtml(generatedAt)}</span><span><span class="pageNumber"></span>/<span class="totalPages"></span></span></div>`;
+  const footerTemplate = `<div style="width:100%;font:8px Arial,sans-serif;color:${palette.muted};padding:0 11mm;display:flex;justify-content:space-between"><span>${escapeHtml(copy.confidential)}</span><span>${escapeHtml(reportPeriod)} · ${escapeHtml(generatedAt)}</span><span><span class="pageNumber"></span>/<span class="totalPages"></span></span></div>`;
   return { html, footerTemplate };
 }

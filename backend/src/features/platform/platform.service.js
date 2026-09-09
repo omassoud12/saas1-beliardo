@@ -55,12 +55,14 @@ export function createPlatformService({ repository = platformRepository } = {}) 
       return { userId, action };
     },
     async removeUser({ actorUserId, userId }) {
+      const profile = await repository.findManagedProfile(userId);
       const result = await repository.transitionUser(actorUserId, userId, "remove");
       if (result.outcome === "self_change_denied") throw new AppError(409, "Administrators cannot remove themselves", "SELF_DELETE_DENIED");
       if (result.outcome === "forbidden") throw new AppError(403, "Platform administrator access is required", "FORBIDDEN");
       if (result.outcome === "not_found") throw new AppError(404, "User not found", "USER_NOT_FOUND");
       if (result.outcome !== "updated") throw new AppError(409, "User removal is invalid", "INVALID_STATUS_TRANSITION");
-      await repository.setAuthBan(userId, true);
+      await repository.deleteAuthUser(userId);
+      if (profile?.email) await repository.revokePendingInvitationsForEmail(profile.email);
     },
     listAuditLogs() { return repository.listAuditLogs(); },
   };

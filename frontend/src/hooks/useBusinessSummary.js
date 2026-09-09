@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getDailySummary, getMonthlySummary, getYearlySummary } from "../lib/businessSummaryApi";
+import { getBusinessAnalysis, getDailySummary, getMonthlySummary, getYearlySummary } from "../lib/businessSummaryApi";
 
 function useQuery(load, dependencies) {
   const [state, setState] = useState({ data: null, error: null, loading: true });
@@ -30,4 +30,9 @@ export function useMonthlySummary(year, month) {
 
 export function useYearlySummary(year) {
   return useQuery((signal) => getYearlySummary(year, signal), [year]);
+}
+
+export function useBusinessAnalysis(period, parameters) {
+  const key = JSON.stringify(parameters);
+  return useQuery((signal) => getBusinessAnalysis(period, parameters, signal), [period, key]);
 }

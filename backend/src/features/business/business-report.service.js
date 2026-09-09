@@ -5,6 +5,7 @@ import { createReportDocument } from "./business-report.template.js";
 import { renderPdf } from "./business-report.pdf.js";
 import { businessReportExportRepository } from "./business-report.repository.js";
 import { reportGenerationGate } from "./business-report.concurrency.js";
+import { businessAnalysisService } from "./business-analysis.service.js";
 
 const MONTHLY_EXPORT_LIMIT = 6;
 
@@ -71,12 +72,19 @@ export function createBusinessReportService({
         let uploaded = false;
         try {
           const method = config.reportType === "daily" ? "daily" : config.reportType === "monthly" ? "monthly" : "yearly";
-          const [business, summary] = await Promise.all([
+          const analysisPromise = summaries === businessService
+            ? businessAnalysisService.analyze({
+              businessId, timezone, period: method,
+              date: config.date, year: config.year, month: config.month,
+            })
+            : Promise.resolve(null);
+          const [business, summary, analysis] = await Promise.all([
             repository.findBusiness(businessId),
             summaries[method]({ businessId, timezone, date: config.date, year: config.year, month: config.month }),
+            analysisPromise,
           ]);
           if (!business) throw new AppError(404, "Business not found", "BUSINESS_NOT_FOUND");
-          const document = createReportDocument({ ...config, business, summary, timezone, generatedAt });
+          const document = createReportDocument({ ...config, business, summary, analysis, timezone, generatedAt });
           const buffer = Buffer.from(await pdf(document, signal));
           await exports.upload(storagePath, buffer);
           uploaded = true;

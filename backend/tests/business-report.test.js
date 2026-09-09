@@ -143,6 +143,57 @@ test("report HTML escapes owner content and supports RTL documents", () => {
   assert.match(document.html, /&lt;img src=x onerror=alert\(1\)&gt;/);
 });
 
+test("business PDF renders a concise executive summary instead of copying the screen", () => {
+  const analysis = {
+    period: { isPartial: true },
+    financial: { totalRevenue: 18, totalCosts: 5, netProfit: 13, profitMargin: 72.22 },
+    expenses: { breakdown: [{ category: "RENT", amount: 5 }] },
+    comparisons: {
+      previousPeriod: { netProfit: { previous: 10 }, totalRevenue: { current: 18, previous: 10, percentageDifference: 80 } },
+      historicalAverage: null,
+      target: { netProfit: { previous: 15 }, values: { revenue: 20, netProfit: 15 } },
+    },
+    decisionSupport: { hasTarget: true, revenueProgress: 3, fullRevenueTarget: 600, expectedCosts: 150, expectedNetProfit: 450, revenueRemaining: 582, requiredDailyRevenue: 23.28, requiredSessions: 65, daysRemaining: 25 },
+    insights: [{ type: "positive", code: "period_profitable", title: "Period is profitable", message: "Net profit is 13 USD.", evidence: { netProfit: 13, profitMargin: 72.22 } }],
+  };
+  const document = createReportDocument({
+    reportType: "monthly", business: { name: "Tenant Lounge" }, summary: summary(), analysis,
+    sections: { summary: true, charts: false, categoryBreakdown: true, detailsTable: false },
+    title: "Analysis", notes: "", language: "en", timezone: "Asia/Beirut", generatedAt: new Date("2026-09-05T12:00:00Z"),
+  });
+  assert.match(document.html, /Business report · تقرير الأعمال/);
+  assert.match(document.html, /Executive summary · الملخص التنفيذي/);
+  assert.match(document.html, /Key figures · الأرقام الأساسية/);
+  assert.match(document.html, /Completed sessions · الجلسات المكتملة/);
+  assert.match(document.html, /Activity mix · مزيج الأنشطة/);
+  assert.match(document.html, /Key takeaways · أهم الملاحظات/);
+  assert.match(document.html, /Period is profitable/);
+  assert.doesNotMatch(document.html, /Expense snapshot/);
+  assert.doesNotMatch(document.html, /Monthly revenue growth/);
+  assert.doesNotMatch(document.html, /Sales plan/);
+  assert.doesNotMatch(document.html, /Revenue needed \/ day/);
+  assert.doesNotMatch(document.html, /Profit comparisons/);
+
+  const arabicDocument = createReportDocument({
+    reportType: "monthly", business: { name: "Tenant Lounge" }, summary: summary(), analysis,
+    sections: { summary: true, charts: false, categoryBreakdown: false, detailsTable: false },
+    title: "Analysis", notes: "", language: "ar", timezone: "Asia/Beirut", generatedAt: new Date("2026-09-05T12:00:00Z"),
+  });
+  assert.match(arabicDocument.html, /الملخص التنفيذي/);
+  assert.match(arabicDocument.html, /فترة رابحة/);
+});
+
+test("business PDF always uses a white print background", () => {
+  const dark = createReportDocument({
+    reportType: "monthly", business: { name: "Tenant Lounge" }, summary: summary(), theme: "dark",
+    sections: { summary: true, charts: false, categoryBreakdown: false, detailsTable: false },
+    title: "Dark summary", notes: "", language: "en", timezone: "Asia/Beirut", generatedAt: new Date("2026-09-05T12:00:00Z"),
+  });
+  assert.match(dark.html, /html \{ background:#fff/);
+  assert.match(dark.html, /body \{ margin:0; color:#18211b/);
+  assert.doesNotMatch(dark.html, /#101310/);
+});
+
 test("report charts and daily details match the current analytics views", () => {
   const common = {
     title: "Aligned report", notes: "", language: "en", business: { name: "Beliardo" },

@@ -14,6 +14,7 @@ function invitationError(error) {
     INVITATION_ALREADY_USED: [409, "Invitation has already been used or revoked", "INVITATION_ALREADY_USED"],
     INVITATION_EXPIRED: [410, "Invitation has expired", "INVITATION_EXPIRED"],
     INVITATION_EMAIL_MISMATCH: [403, "Sign in with the email address that was invited", "INVITATION_EMAIL_MISMATCH"],
+    INVITATION_SELECTION_REQUIRED: [409, "Open the latest employee invitation email to choose the lounge", "INVITATION_SELECTION_REQUIRED"],
     ACCOUNT_TYPE_CONFLICT: [409, "This account cannot accept an employee invitation", "ACCOUNT_TYPE_CONFLICT"],
     ACCOUNT_BLOCKED: [403, "This account is blocked by the platform administrator", "ACCOUNT_BLOCKED"],
   };
@@ -56,7 +57,11 @@ export function createEmployeeService({ repository = employeeRepository, env = g
     },
     listInvitations(businessId) { return repository.listInvitations(businessId); },
     async invite({ businessId, actorUserId, email, frontendOrigin }) {
-      if (await repository.findPendingInvitation(businessId, email)) throw new AppError(409, "A pending invitation already exists", "INVITATION_EXISTS");
+      const pendingInvitation = await repository.findPendingInvitation(businessId, email);
+      if (pendingInvitation) {
+        if (await repository.findProfileByEmail(email)) throw new AppError(409, "A pending invitation already exists", "INVITATION_EXISTS");
+        await repository.revokeInvitation(businessId, pendingInvitation.id);
+      }
       const token = newToken();
       const invitation = await repository.insertInvitation({ business_id: businessId, email, invited_by: actorUserId, token_hash: hashToken(token), expires_at: expiresAt() });
       try { await deliver(email, token, frontendOrigin); } catch (error) {
@@ -95,7 +100,13 @@ export function createEmployeeService({ repository = employeeRepository, env = g
       return { userId, status };
     },
     async accept({ token, userId, email }) {
-      try { return await repository.accept(hashToken(token), userId, email); } catch (error) { throw invitationError(error); }
+      try {
+        if (token) return await repository.accept(hashToken(token), userId, email);
+        const invitations = await repository.findPendingInvitationsByEmail(email);
+        if (!invitations.length) throw new Error("INVITATION_NOT_FOUND");
+        if (invitations.length > 1) throw new Error("INVITATION_SELECTION_REQUIRED");
+        return await repository.accept(invitations[0].token_hash, userId, email);
+      } catch (error) { throw invitationError(error); }
     },
   };
 }

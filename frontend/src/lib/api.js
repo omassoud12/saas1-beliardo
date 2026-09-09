@@ -1,5 +1,6 @@
 import { supabase } from "./supabase";
 import { createAuthenticatedRequestKey, createInFlightRequestCache } from "./inFlightRequests";
+import { DEFAULT_API_TIMEOUT_MS, fetchWithTimeout } from "./requestTimeout";
 
 const apiBaseUrl = (import.meta.env.VITE_API_URL ?? "http://localhost:4000/api").replace(/\/$/, "");
 const getRequests = createInFlightRequestCache();
@@ -66,15 +67,15 @@ export async function apiFileRequest(path, options = {}) {
 }
 
 async function performApiRequest(path, options, session) {
-  const { headers, ...fetchOptions } = options;
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const { headers, timeoutMs = DEFAULT_API_TIMEOUT_MS, ...fetchOptions } = options;
+  const response = await fetchWithTimeout(`${apiBaseUrl}${path}`, {
     ...fetchOptions,
     headers: {
       Authorization: `Bearer ${session.access_token}`,
       "Content-Type": "application/json",
       ...headers,
     },
-  });
+  }, { timeoutMs });
 
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
@@ -100,8 +101,8 @@ export async function syncStations(stations) {
   return payload.data.stations;
 }
 
-export async function fetchActiveSessions() {
-  const payload = await apiRequest("/sessions/active");
+export async function fetchActiveSessions(options = {}) {
+  const payload = await apiRequest("/sessions/active", options);
   return {
     sessions: payload.data.sessions,
     finishedToday: Number(payload.data.finishedToday) || 0,
@@ -196,7 +197,7 @@ export async function fetchMyAccess() {
 }
 
 export async function acceptEmployeeInvitation(token) {
-  const payload = await apiRequest("/employees/invitations/accept", { method: "POST", body: JSON.stringify({ token }) });
+  const payload = await apiRequest("/employees/invitations/accept", { method: "POST", body: JSON.stringify(token ? { token } : {}) });
   return payload.data.membership;
 }
 

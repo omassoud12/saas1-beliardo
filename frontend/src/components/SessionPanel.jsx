@@ -34,6 +34,9 @@ export function SessionPanel({
   const closeButtonRef = useRef(null);
   const safeActionRef = useRef(null);
   const endOpeningRef = useRef(false);
+  const busyRef = useRef(busy);
+  const closeRequestRef = useRef(null);
+  const dismissRequestRef = useRef(null);
   const [confirmationMode, setConfirmationMode] = useState(null);
   const [endTimeInput, setEndTimeInput] = useState("");
   const [endTimeAdjusted, setEndTimeAdjusted] = useState(false);
@@ -42,6 +45,7 @@ export function SessionPanel({
     station.type === "playstation" ? (Number(station.controllerCount) || 1) : 1,
   );
   const confirmationModeRef = useRef(null);
+  busyRef.current = busy;
   const isAvailable = station.status === "available";
   const selectedEnd = endTimeAdjusted
     ? zonedTimeToTimestamp(endTimeInput, timezone, now)
@@ -80,8 +84,9 @@ export function SessionPanel({
 
     const handleKeyDown = (event) => {
       if (event.key === "Escape") {
-        if (confirmationModeRef.current) setConfirmationMode(null);
-        else onClose();
+        if (busyRef.current) return;
+        if (confirmationModeRef.current) dismissRequestRef.current?.();
+        else closeRequestRef.current?.();
         return;
       }
 
@@ -153,6 +158,29 @@ export function SessionPanel({
     }
   };
 
+  const dismissConfirmation = async () => {
+    if (busy) return;
+    if (confirmationMode === "end") {
+      await keepSession();
+      return;
+    }
+    setConfirmationMode(null);
+  };
+
+  const requestClose = async () => {
+    if (busy) return;
+    if (confirmationMode === "end") {
+      const resumed = await onKeep();
+      if (!resumed) return;
+      setConfirmationMode(null);
+      setPendingEndAt(null);
+    }
+    onClose();
+  };
+
+  dismissRequestRef.current = dismissConfirmation;
+  closeRequestRef.current = requestClose;
+
   const confirmEnd = () => {
     if (endTimeError || !selectedEnd) return;
     onEnd(new Date(selectedEnd).toISOString());
@@ -160,7 +188,7 @@ export function SessionPanel({
 
   return (
     <div className="session-overlay" role="presentation" onMouseDown={(event) => {
-      if (event.target === event.currentTarget) onClose();
+      if (event.target === event.currentTarget) requestClose();
     }}>
       <section
         className={`session-panel session-panel--${station.type}`}
@@ -184,9 +212,10 @@ export function SessionPanel({
           <button
             className="icon-button"
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             ref={closeButtonRef}
             aria-label="Close session controls"
+            disabled={busy}
           >
             <CloseIcon />
           </button>

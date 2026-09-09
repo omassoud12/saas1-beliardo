@@ -67,6 +67,8 @@ export function validateBusinessReport(request) {
 
   const language = body.language ?? "en";
   if (!["en", "ar"].includes(language)) errors.push("language must be en or ar");
+  const theme = body.theme ?? "light";
+  if (!["dark", "light"].includes(theme)) errors.push("theme must be dark or light");
   return errors.length ? { success: false, errors } : {
     success: true,
     data: {
@@ -78,6 +80,7 @@ export function validateBusinessReport(request) {
       notes,
       sections,
       language,
+      theme,
     },
   };
 }

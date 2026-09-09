@@ -5,6 +5,7 @@ import { createPlatformService } from "../src/features/platform/platform.service
 function repository(overrides = {}) {
   return {
     async findProfile(id) { return { id, account_type: "owner", account_status: "pending_approval" }; },
+    async findManagedProfile(id) { return { id, email: "user@example.com" }; },
     async findOwnerMembership(userId) { return { user_id: userId, business_id: "business-1", role: "owner", status: "active" }; },
     async findMembership(userId) { return { user_id: userId, business_id: "business-1", role: "owner", status: "active" }; },
     async updateProfile() {}, async updateBusiness() {}, async updateMembership() {}, async audit() {},
@@ -12,7 +13,7 @@ function repository(overrides = {}) {
       if (actorUserId === userId) return { outcome: "self_change_denied" };
       return { outcome: "updated", account_status: action === "approve" ? "approved" : action === "suspend" ? "suspended" : "approved" };
     },
-    async setAuthBan() {},
+    async setAuthBan() {}, async deleteAuthUser() {}, async revokePendingInvitationsForEmail() {},
     async listManagedProfiles() { return []; }, async listMemberships() { return []; }, async listBusinesses() { return []; },
     ...overrides,
   };
@@ -35,4 +36,30 @@ test("employee suspension disables both profile and tenant membership", async ()
   const service = createPlatformService({ repository: repository({ async transitionUser(actor, user, action) { writes.push([actor, user, action]); return { outcome: "updated", account_status: "suspended" }; } }) });
   await service.changeUserStatus({ actorUserId: "admin-1", userId: "employee-1", action: "suspend" });
   assert.deepEqual(writes, [["admin-1", "employee-1", "suspend"]]);
+});
+
+test("removing a managed user permanently deletes the Supabase Auth account", async () => {
+  const writes = [];
+  const service = createPlatformService({ repository: repository({
+    async transitionUser(actor, user, action) { writes.push(["transition", actor, user, action]); return { outcome: "updated", account_status: "deleted" }; },
+    async deleteAuthUser(user) { writes.push(["delete-auth", user]); },
+    async revokePendingInvitationsForEmail(email) { writes.push(["revoke-invitations", email]); },
+  }) });
+  await service.removeUser({ actorUserId: "admin-1", userId: "employee-1" });
+  assert.deepEqual(writes, [
+    ["transition", "admin-1", "employee-1", "remove"],
+    ["delete-auth", "employee-1"],
+    ["revoke-invitations", "user@example.com"],
+  ]);
+});
+
+test("suspending a user bans the account without deleting it", async () => {
+  const writes = [];
+  const service = createPlatformService({ repository: repository({
+    async transitionUser() { return { outcome: "updated", account_status: "suspended" }; },
+    async setAuthBan(user, banned) { writes.push(["ban", user, banned]); },
+    async deleteAuthUser(user) { writes.push(["delete-auth", user]); },
+  }) });
+  await service.changeUserStatus({ actorUserId: "admin-1", userId: "employee-1", action: "suspend" });
+  assert.deepEqual(writes, [["ban", "employee-1", true]]);
 });

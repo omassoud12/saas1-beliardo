@@ -1,0 +1,13 @@
+# Direct dependency pins for CPython 3.12 (3.11 is also supported).
+# Transitive dependencies are resolved by pip; this is not a complete lockfile.
+pandas==2.3.3
+numpy==2.2.6
+scikit-learn==1.7.2
+xgboost==3.0.5
+joblib==1.5.2
+matplotlib==3.10.7
+fastapi==0.119.1
+uvicorn[standard]==0.38.0
+pydantic==2.12.3
+python-dotenv==1.1.1
+pytest==8.4.2

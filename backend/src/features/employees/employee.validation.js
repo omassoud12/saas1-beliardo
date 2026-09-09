@@ -13,6 +13,7 @@ export function validateInvitationId(request) {
 }
 export function validateAcceptInvitation(request) {
   const token = request.body?.token;
+  if (token === undefined || token === null || token === "") return { success: true, data: { token: null } };
   return typeof token === "string" && token.length >= 32 && token.length <= 512
     ? { success: true, data: { token } }
     : { success: false, errors: ["token is invalid"] };

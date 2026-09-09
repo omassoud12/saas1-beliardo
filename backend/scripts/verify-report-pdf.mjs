@@ -39,7 +39,7 @@ const bucket = (key, multiplier) => {
 
 const reports = [
   {
-    ...common, reportType: "daily", language: "en",
+    ...common, reportType: "daily", language: "en", theme: "dark",
     summary: {
       period: { kind: "day", date: "2026-08-27", businessDate: "2026-08-27", currency: "USD", timezone: "Asia/Beirut", from: "2026-08-27T03:00:00Z", to: "2026-08-28T03:00:00Z" },
       metrics: metricSet(3, 10800, 36), activities,
