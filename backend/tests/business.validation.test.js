@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  validateDailySummary, validateMonthlySummary, validateYearlySummary,
+  validateBusinessAnalysis, validateDailySummary, validateMonthlySummary, validatePagination, validateYearlySummary,
 } from "../src/features/business/business.validation.js";
 import { validateBusinessReport, validateBusinessReportId } from "../src/features/business/business-report.validation.js";
 
@@ -9,12 +9,20 @@ test("business analytics period validation accepts valid ranges", () => {
   assert.equal(validateDailySummary({ query: { date: "2026-08-24" } }).success, true);
   assert.deepEqual(validateMonthlySummary({ query: { year: "2026", month: "8" } }).data, { year: 2026, month: 8 });
   assert.equal(validateYearlySummary({ query: { year: "2026" } }).success, true);
+  assert.deepEqual(validateBusinessAnalysis({ query: { period: "weekly", date: "2026-09-14" } }).data, { period: "weekly", date: "2026-09-14" });
 });
 
 test("business analytics period validation rejects impossible values", () => {
   assert.equal(validateDailySummary({ query: { date: "2026-02-30" } }).success, false);
   assert.equal(validateMonthlySummary({ query: { year: "2026", month: "13" } }).success, false);
   assert.equal(validateYearlySummary({ query: { year: "1900" } }).success, false);
+});
+
+test("record pagination is bounded and daily pagination remains optional", () => {
+  assert.deepEqual(validatePagination({ query: {} }).data, { page: 1, pageSize: 50 });
+  assert.deepEqual(validatePagination({ query: { page: "3", pageSize: "20" } }).data, { page: 3, pageSize: 20 });
+  assert.equal(validatePagination({ query: { page: "0", pageSize: "101" } }).success, false);
+  assert.deepEqual(validateDailySummary({ query: { date: "2026-08-24", page: "2", pageSize: "25" } }).data, { date: "2026-08-24", page: 2, pageSize: 25 });
 });
 
 test("business PDF validation normalizes safe owner configuration", () => {

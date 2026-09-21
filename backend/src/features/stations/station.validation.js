@@ -5,12 +5,14 @@ const types = new Set(["billiard", "pingpong", "playstation"]);
 const stationIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 function normalizeStation(station) {
+  const hasExchangeRate = station?.exchangeRate !== undefined && station?.exchangeRate !== null;
   if (
     !station || typeof station.id !== "string" || !stationIdPattern.test(station.id) ||
     !types.has(station.type) || !Number.isInteger(Number(station.number)) ||
     Number(station.number) < 1 || Number(station.number) > 999 ||
     !Number.isFinite(Number(station.hourlyRate)) || Number(station.hourlyRate) < 0 ||
-    Number(station.hourlyRate) > 999
+    Number(station.hourlyRate) > 999 ||
+    (hasExchangeRate && (!Number.isFinite(Number(station.exchangeRate)) || Number(station.exchangeRate) <= 0))
   ) return null;
 
   return {
@@ -18,6 +20,7 @@ function normalizeStation(station) {
     type: station.type,
     number: Number(station.number),
     hourlyRate: Number(station.hourlyRate),
+    exchangeRate: hasExchangeRate ? Number(station.exchangeRate) : null,
   };
 }
 

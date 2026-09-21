@@ -62,18 +62,20 @@ function buildBuckets(keys, rows) {
 
 function mapSession(row) {
   const station = Array.isArray(row.station) ? row.station[0] : row.station;
+  const activity = row.station_type_at_completion ?? station?.type ?? "unknown";
   return {
     id: row.id,
     status: row.status,
-    activity: station?.type ?? "unknown",
-    activityLabel: activityLabels[station?.type] ?? "Unknown",
-    stationNumber: station?.number ?? null,
+    activity,
+    activityLabel: activityLabels[activity] ?? "Unknown",
+    stationNumber: row.station_number_at_completion ?? station?.number ?? null,
     hourlyRate: Number(row.hourly_rate || 0),
-    controllerCount: station?.type === "playstation" ? (Number(row.controller_count) || 1) : 1,
+    controllerCount: activity === "playstation" ? (Number(row.controller_count) || 1) : 1,
     startedAt: row.started_at,
     pausedAt: row.paused_at,
     endedAt: row.ended_at,
     totalPausedSeconds: Number(row.total_paused_seconds || 0),
+    pauseIntervals: Array.isArray(row.pause_intervals) ? row.pause_intervals : [],
     durationSeconds: Number(row.final_elapsed_seconds || 0),
     revenue: Number(row.final_cost || 0),
   };
@@ -92,17 +94,21 @@ function dayKeys(year, month) {
 
 export function createBusinessService({ repository = businessRepository, clock = () => new Date() } = {}) {
   return {
-    async daily({ businessId, timezone, date }) {
+    async daily({ businessId, timezone, date, page = 1, pageSize = 50, aggregateRange = null }) {
       const range = getDateRange(date, timezone);
+      const dataRange = aggregateRange ?? range;
       const [rows, sessionRows, concurrencyRows] = await Promise.all([
-        repository.aggregate(businessId, range, "hour", timezone),
-        repository.findDailySessions(businessId, range),
+        repository.aggregate(businessId, dataRange, "hour", timezone),
+        repository.findDailySessions(businessId, range, { page, pageSize }),
         repository.findConcurrencySessions(businessId, range),
       ]);
       const traffic = buildBuckets(getHourlyBucketKeys(range), rows);
       const completed = summarize(rows);
-      const sessions = sessionRows.map(mapSession);
-      const openSessionCount = sessions.filter((session) => session.status !== "completed").length;
+      const sessionResult = Array.isArray(sessionRows)
+        ? { items: sessionRows, total: sessionRows.length, page: 1, pageSize: sessionRows.length || pageSize, hasMore: false }
+        : sessionRows;
+      const sessions = sessionResult.items.map(mapSession);
+      const openSessionCount = sessionResult.openCount ?? sessions.filter((session) => session.status !== "completed").length;
       const peak = traffic.reduce((best, bucket) =>
         bucket.total.sessions > best.sessions
           ? { sessions: bucket.total.sessions, key: bucket.key }
@@ -122,13 +128,14 @@ export function createBusinessService({ repository = businessRepository, clock =
         activities: completed.activities,
         traffic,
         sessions,
+        sessionPagination: { total: sessionResult.total, page: sessionResult.page, pageSize: sessionResult.pageSize, hasMore: sessionResult.hasMore },
         concurrencySessions: concurrencyRows.map(mapSession),
       };
     },
 
-    async monthly({ businessId, timezone, year, month }) {
+    async monthly({ businessId, timezone, year, month, aggregateRange = null }) {
       const range = getMonthRange(year, month, timezone);
-      const rows = await repository.aggregate(businessId, range, "day", timezone);
+      const rows = await repository.aggregate(businessId, aggregateRange ?? range, "day", timezone);
       const days = buildBuckets(dayKeys(year, month), rows);
       const summary = summarize(rows);
       return {
@@ -145,11 +152,12 @@ export function createBusinessService({ repository = businessRepository, clock =
       };
     },
 
-    async yearly({ businessId, timezone, year }) {
+    async yearly({ businessId, timezone, year, aggregateRange = null }) {
       const range = getYearRange(year, timezone);
+      const dataRange = aggregateRange ?? range;
       const [monthRows, dayRows] = await Promise.all([
-        repository.aggregate(businessId, range, "month", timezone),
-        repository.aggregate(businessId, range, "day", timezone),
+        repository.aggregate(businessId, dataRange, "month", timezone),
+        repository.aggregate(businessId, dataRange, "day", timezone),
       ]);
       const months = buildBuckets(monthKeys(year), monthRows);
       const summary = summarize(monthRows);

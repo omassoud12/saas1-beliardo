@@ -1,4 +1,5 @@
 import { getDateRange, getMonthRange, getYearRange } from "../../shared/utils/timeRange.js";
+import { getWeekStartDate } from "../../shared/utils/timeRange.js";
 import { daysBetween, shiftDateKey } from "./business-analysis.calculations.js";
 
 function monthKey(year, month) { return `${year}-${String(month).padStart(2, "0")}`; }
@@ -18,13 +19,42 @@ function rangeFromDates(startDate, endDateExclusive, timezone) {
   };
 }
 
-export function resolveAnalysisPeriods({ period, date, year, month, businessDate, timezone }) {
+function clipToEquivalentElapsed(current, previous, now) {
+  const currentStart = new Date(current.from).getTime();
+  const currentEnd = new Date(current.to).getTime();
+  const previousStart = new Date(previous.from).getTime();
+  const previousEnd = new Date(previous.to).getTime();
+  const currentTo = Math.min(currentEnd, Math.max(currentStart, new Date(now).getTime()));
+  const elapsed = currentTo - currentStart;
+  const previousTo = Math.min(previousEnd, previousStart + elapsed);
+  return {
+    current: { ...current, to: new Date(currentTo).toISOString(), isPartial: currentTo < currentEnd },
+    previous: { ...previous, to: new Date(previousTo).toISOString(), isPartial: previousTo < previousEnd },
+  };
+}
+
+export function resolveAnalysisPeriods({ period, date, year, month, businessDate, timezone, now = new Date() }) {
   if (period === "daily") {
     const previousDate = shiftDateKey(date, -1);
-    return {
+    const ranges = {
       current: { ...rangeFromDates(date, shiftDateKey(date, 1), timezone), kind: "day", date, isPartial: false },
       previous: { ...rangeFromDates(previousDate, date, timezone), kind: "day", date: previousDate, isPartial: false },
     };
+    return date === businessDate ? clipToEquivalentElapsed(ranges.current, ranges.previous, now) : ranges;
+  }
+
+  if (period === "weekly") {
+    const currentStart = getWeekStartDate(date);
+    const currentFullEnd = shiftDateKey(currentStart, 7);
+    const isPartial = businessDate >= currentStart && businessDate < currentFullEnd;
+    const currentEnd = isPartial ? shiftDateKey(businessDate, 1) : currentFullEnd;
+    const previousStart = shiftDateKey(currentStart, -7);
+    const previousEnd = isPartial ? shiftDateKey(previousStart, daysBetween(currentStart, currentEnd)) : currentStart;
+    const ranges = {
+      current: { ...rangeFromDates(currentStart, currentEnd, timezone), kind: "week", date: currentStart, isPartial },
+      previous: { ...rangeFromDates(previousStart, previousEnd, timezone), kind: "week", date: previousStart, isPartial },
+    };
+    return isPartial ? clipToEquivalentElapsed(ranges.current, ranges.previous, now) : ranges;
   }
 
   if (period === "monthly") {
@@ -39,10 +69,11 @@ export function resolveAnalysisPeriods({ period, date, year, month, businessDate
     const elapsedDays = daysBetween(currentStart, currentEndDate);
     const priorDays = Math.min(elapsedDays, daysInMonth(prior.year, prior.month));
     const priorEnd = isPartial ? shiftDateKey(priorStart, priorDays) : currentStart;
-    return {
+    const ranges = {
       current: { ...rangeFromDates(currentStart, currentEndDate, timezone), kind: "month", year, month, isPartial },
       previous: { ...rangeFromDates(priorStart, priorEnd, timezone), kind: "month", year: prior.year, month: prior.month, isPartial },
     };
+    return isPartial ? clipToEquivalentElapsed(ranges.current, ranges.previous, now) : ranges;
   }
 
   const selectedYear = Number(year);
@@ -60,10 +91,11 @@ export function resolveAnalysisPeriods({ period, date, year, month, businessDate
       && new Date(`${comparable}T12:00:00Z`).toISOString().slice(0, 10) === comparable;
     previousEnd = shiftDateKey(valid ? comparable : `${previousYear}-02-28`, 1);
   }
-  return {
+  const ranges = {
     current: { ...rangeFromDates(currentStart, currentEnd, timezone), kind: "year", year: selectedYear, isPartial },
     previous: { ...rangeFromDates(previousStart, previousEnd, timezone), kind: "year", year: previousYear, isPartial },
   };
+  return isPartial ? clipToEquivalentElapsed(ranges.current, ranges.previous, now) : ranges;
 }
 
 export function historyRange(currentStartDate, businessCreatedDate, timezone) {

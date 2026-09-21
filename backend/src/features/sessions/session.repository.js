@@ -23,6 +23,10 @@ export function mapSession(row) {
     totalPausedSeconds: Number(row.total_paused_seconds) || 0,
     finalElapsedSeconds: row.final_elapsed_seconds === null ? null : Number(row.final_elapsed_seconds),
     finalCost: row.final_cost === null ? null : Number(row.final_cost),
+    stationTypeAtCompletion: row.station_type_at_completion ?? null,
+    stationNumberAtCompletion: row.station_number_at_completion === null || row.station_number_at_completion === undefined
+      ? null
+      : Number(row.station_number_at_completion),
     createdBy: row.created_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -34,6 +38,7 @@ const selectFields = `
   id, business_id, station_id, status, hourly_rate, controller_count, started_at, paused_at,
   ended_at, ended_recorded_at, ended_by, cancelled_at, cancelled_by, pause_intervals,
   total_paused_seconds, final_elapsed_seconds, final_cost,
+  station_type_at_completion, station_number_at_completion,
   created_by, created_at, updated_at,
   station:stations(id, type, number, hourly_rate, status)
 `;

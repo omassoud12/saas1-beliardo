@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import express from "express";
-import { createApiRateLimiter, createPdfGenerationRateLimiter } from "../src/middleware/security.js";
+import { createApiRateLimiter, createPdfGenerationRateLimiter, createSensitiveActorRateLimiter } from "../src/middleware/security.js";
 
 async function withServer(app, run) {
   const server = await new Promise((resolve) => {
@@ -45,5 +45,21 @@ test("PDF generation limiter isolates quotas by authenticated business", async (
     assert.equal((await fetch(`${baseUrl}/pdf`, tenantA)).status, 200);
     assert.equal((await fetch(`${baseUrl}/pdf`, tenantA)).status, 429);
     assert.equal((await fetch(`${baseUrl}/pdf`, { headers: { "X-Business-Id": "tenant-b" } })).status, 200);
+  });
+});
+
+test("actor limiter keys authenticated users from request.auth.user.id", async () => {
+  const app = express();
+  app.use((request, _response, next) => {
+    request.auth = { businessId: "tenant-a", user: { id: request.headers["x-user-id"] } };
+    next();
+  });
+  app.use(createSensitiveActorRateLimiter({ identifier: "actor-identity-test", limit: 1 }));
+  app.get("/mutation", (_request, response) => response.json({ ok: true }));
+
+  await withServer(app, async (baseUrl) => {
+    assert.equal((await fetch(`${baseUrl}/mutation`, { headers: { "X-User-Id": "user-a" } })).status, 200);
+    assert.equal((await fetch(`${baseUrl}/mutation`, { headers: { "X-User-Id": "user-a" } })).status, 429);
+    assert.equal((await fetch(`${baseUrl}/mutation`, { headers: { "X-User-Id": "user-b" } })).status, 200);
   });
 });

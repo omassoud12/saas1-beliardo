@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   getBucketKey, getBusinessDateKey, getDateRange, getDefaultChartRange,
-  getHourlyBucketKeys, getMonthRange, getPeriodRange, getYearRange, normalizeBusinessRange,
+  getHourlyBucketKeys, getMonthRange, getPeriodRange, getWeekRange, getWeekStartDate, getYearRange, normalizeBusinessRange,
 } from "../src/shared/utils/timeRange.js";
 
 const timezone = "Asia/Beirut";
@@ -32,6 +32,16 @@ test("daily, monthly, and yearly ranges use tenant-local 06:00 boundaries", () =
   });
   assert.deepEqual(getYearRange(2026, timezone), {
     from: "2026-01-01T04:00:00.000Z", to: "2027-01-01T04:00:00.000Z",
+  });
+});
+
+test("weekly ranges use the existing Monday boundary at tenant-local 06:00", () => {
+  assert.equal(getWeekStartDate("2026-09-16"), "2026-09-14");
+  assert.deepEqual(getWeekRange("2026-09-16", timezone), {
+    from: "2026-09-14T03:00:00.000Z", to: "2026-09-21T03:00:00.000Z",
+  });
+  assert.deepEqual(getWeekRange("2026-09-01", timezone), {
+    from: "2026-08-31T03:00:00.000Z", to: "2026-09-07T03:00:00.000Z",
   });
 });
 

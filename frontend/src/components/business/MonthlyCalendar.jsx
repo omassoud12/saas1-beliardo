@@ -1,10 +1,11 @@
 import { formatCurrency, formatDate, formatHours } from "../../utils/analytics";
 
-export function MonthlyCalendar({ year, month, days, onSelectDay }) {
+export function MonthlyCalendar({ year, month, days = [], onSelectDay }) {
+  const safeDays = Array.isArray(days) ? days : [];
   const firstDay = new Date(Date.UTC(year, month - 1, 1));
   const leading = (firstDay.getUTCDay() + 6) % 7;
-  const maxRevenue = Math.max(...days.map((day) => day.total.revenue), 0);
-  const cells = [...Array.from({ length: leading }, () => null), ...days];
+  const maxRevenue = Math.max(...safeDays.map((day) => Number(day?.total?.revenue) || 0), 0);
+  const cells = [...Array.from({ length: leading }, () => null), ...safeDays];
 
   return (
     <section className="analytics-panel calendar-panel" aria-labelledby="daily-totals-title">
@@ -12,6 +13,7 @@ export function MonthlyCalendar({ year, month, days, onSelectDay }) {
         <div><p className="eyebrow">Day-by-day</p><h3 id="daily-totals-title">Daily totals calendar</h3></div>
         <p>Select any day to open its complete session summary.</p>
       </div>
+      {safeDays.length === 0 && <p className="business-empty-copy">No daily totals are available for this month.</p>}
       <div className="business-calendar" role="grid" aria-label="Monthly business totals">
         {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day) => <div className="calendar-weekday" role="columnheader" key={day}>{day}</div>)}
         {cells.map((day, index) => day ? (

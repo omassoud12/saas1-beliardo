@@ -1,5 +1,7 @@
 const datePattern = /^(\d{4})-(\d{2})-(\d{2})$/;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+// Keeps two-decimal monetary inputs within Number.MAX_SAFE_INTEGER when expressed as cents.
+const MAX_SAFE_MONEY_AMOUNT = 90_000_000_000_000;
 
 function validDate(value) {
   const match = typeof value === "string" ? value.match(datePattern) : null;
@@ -14,12 +16,31 @@ function validYear(value) {
   return Number.isInteger(year) && year >= 2000 && year <= 2100 ? year : null;
 }
 
+function paginationValues(query = {}) {
+  const page = query.page === undefined ? 1 : Number(query.page);
+  const pageSize = query.pageSize === undefined ? 50 : Number(query.pageSize);
+  const errors = [];
+  if (!Number.isInteger(page) || page < 1) errors.push("page must be a positive integer");
+  if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) errors.push("pageSize must be between 1 and 100");
+  return { errors, page, pageSize };
+}
+
+export function validatePagination(request) {
+  const result = paginationValues(request.query);
+  return result.errors.length
+    ? { success: false, errors: result.errors }
+    : { success: true, data: { page: result.page, pageSize: result.pageSize } };
+}
+
 export function validateDailySummary(request) {
   const date = request.query.date;
+  const pagination = paginationValues(request.query);
+  if (pagination.errors.length) return { success: false, errors: pagination.errors };
   if (!validDate(date)) {
     return { success: false, errors: ["date must be a valid calendar date"] };
   }
-  return { success: true, data: { date } };
+  const requestedPagination = request.query.page !== undefined || request.query.pageSize !== undefined;
+  return { success: true, data: { date, ...(requestedPagination ? { page: pagination.page, pageSize: pagination.pageSize } : {}) } };
 }
 
 export function validateMonthlySummary(request) {
@@ -40,15 +61,15 @@ export function validateYearlySummary(request) {
 
 export function validateBusinessAnalysis(request) {
   const period = request.query.period;
-  if (!["daily", "monthly", "yearly"].includes(period)) {
-    return { success: false, errors: ["period must be daily, monthly, or yearly"] };
+  if (!["daily", "weekly", "monthly", "yearly"].includes(period)) {
+    return { success: false, errors: ["period must be daily, weekly, monthly, or yearly"] };
   }
-  const result = period === "daily" ? validateDailySummary(request)
+  const result = ["daily", "weekly"].includes(period) ? validateDailySummary(request)
     : period === "monthly" ? validateMonthlySummary(request) : validateYearlySummary(request);
   return result.success ? { success: true, data: { period, ...result.data } } : result;
 }
 
-function boundedNumber(value, { minimum = 0, maximum = 1_000_000_000_000_000, required = true } = {}) {
+function boundedNumber(value, { minimum = 0, maximum = MAX_SAFE_MONEY_AMOUNT, required = true } = {}) {
   if ((value === null || value === undefined || value === "") && !required) return null;
   const number = Number(value);
   return Number.isFinite(number) && number >= minimum && number <= maximum ? number : undefined;

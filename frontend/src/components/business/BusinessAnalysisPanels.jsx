@@ -1,6 +1,10 @@
-import { formatCurrency, formatDate } from "../../utils/analytics";
+import { formatCurrency } from "../../utils/analytics";
+import { buildSecondaryKpis, compactPeriodLabel, comparisonDetails, profitCostPresentation, targetProgressPresentation } from "../../utils/businessKpis";
 import { AnalyticsError, AnalyticsLoading } from "./AnalyticsStates";
 import { ActivityRevenueShare } from "./charts/ActivityRevenueShare";
+import { ActivityOperations, StationPerformance } from "./ActivityOperations";
+import { useStationPerformance } from "../../hooks/useBusinessSummary";
+import { BUSINESS_COPY } from "../../content/businessCopy";
 const expenseLabels = {
   RENT: ["Rent", "الإيجار"], ELECTRICITY: ["Electricity", "الكهرباء"],
   EMPLOYEES: ["Employees", "الموظفون"], OTHER: ["Other", "أخرى"],
@@ -12,14 +16,6 @@ function valueOrDash(value, formatter = (item) => item) {
 function percentValue(value) {
   return value === null || value === undefined ? "—" : `${Number(value).toFixed(2)}%`;
 }
-function changeLabel(comparison, currency = false) {
-  if (!comparison) return "Not available · غير متاح";
-  const difference = currency ? formatCurrency(comparison.absoluteDifference) : comparison.absoluteDifference;
-  if (comparison.percentageDifference === null) return `${difference} · No percentage baseline / لا توجد نسبة مقارنة`;
-  const sign = comparison.percentageDifference > 0 ? "+" : "";
-  return `${sign}${comparison.percentageDifference}% · ${difference}`;
-}
-
 const activityArabic = { playstation: "البلايستيشن", billiard: "البليارد", pingpong: "البينغ بونغ" };
 
 function arabicInsight(item) {
@@ -49,12 +45,9 @@ function arabicInsight(item) {
 function TargetActionPlan({ data }) {
   const plan = data.decisionSupport;
   if (!plan?.hasTarget) return <section className="target-action target-action--empty" aria-labelledby="target-action-title"><div><p className="eyebrow">Next decision · القرار التالي</p><h3 id="target-action-title">Set a monthly sales target · حدّد هدف المبيعات الشهري</h3></div><p>Add one target made of expected costs plus desired profit to unlock daily revenue and session guidance.<br /><span lang="ar" dir="rtl">أضف هدفاً واحداً يجمع المصاريف المتوقعة والربح المطلوب لتظهر خطة المبيعات والجلسات اليومية.</span></p></section>;
-  const progress = Math.max(0, plan.revenueProgress ?? 0);
-  const cappedProgress = Math.min(100, progress);
   const completed = plan.revenueRemaining <= 0;
   return <section className={`target-action ${completed ? "target-action--complete" : ""}`} aria-labelledby="target-action-title">
-    <div className="target-action__heading"><div><p className="eyebrow">Sales plan · خطة المبيعات</p><h3 id="target-action-title">{completed ? "Target reached · تم تحقيق الهدف" : plan.periodClosed ? `${formatCurrency(plan.revenueRemaining)} short when the period closed · قيمة النقص عند انتهاء الفترة` : `${formatCurrency(plan.revenueRemaining)} remaining · متبقّي للوصول إلى الهدف`}</h3></div><strong>{percentValue(progress)}</strong></div>
-    <div className="target-progress" role="progressbar" aria-label="Revenue target progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(cappedProgress)}><span style={{ width: `${cappedProgress}%` }} /></div>
+    <div className="target-action__heading"><div><p className="eyebrow">Sales plan · خطة المبيعات</p><h3 id="target-action-title">{completed ? "Target achieved · تم تحقيق الهدف" : plan.periodClosed ? "Period closed · راجع النتيجة" : "Pace needed to reach target · الوتيرة المطلوبة لتحقيق الهدف"}</h3></div></div>
     <div className="target-action__metrics">
       <div><span>Revenue needed / day<br /><b lang="ar" dir="rtl">المبيعات المطلوبة يومياً</b></span><strong>{plan.periodClosed ? "—" : valueOrDash(plan.requiredDailyRevenue, formatCurrency)}</strong></div>
       <div><span>Sessions still needed<br /><b lang="ar" dir="rtl">الجلسات المتبقية تقريباً</b></span><strong>{plan.periodClosed ? "—" : valueOrDash(plan.requiredSessions)}</strong></div>
@@ -70,8 +63,7 @@ function ExpenseOverview({ data }) {
   const active = data.expenses.breakdown.filter((item) => item.amount > 0);
   const largest = active.reduce((best, item) => !best || item.amount > best.amount ? item : best, null);
   const costShare = data.financial.totalRevenue > 0 ? data.financial.totalCosts / data.financial.totalRevenue * 100 : null;
-  const comparison = data.comparisons.previousPeriod.totalCosts;
-  return <section className="expense-overview" aria-labelledby="expense-overview-title"><div><p className="eyebrow">Cost control · مراقبة المصاريف</p><h3 id="expense-overview-title">Expense snapshot · ملخص المصاريف</h3></div><div className="expense-overview__grid"><div><span>Share of revenue · نسبتها من المبيعات</span><strong>{percentValue(costShare)}</strong></div><div><span>Largest category · أكبر فئة</span><strong>{largest ? `${expenseLabels[largest.category]?.[0] ?? largest.category} · ${formatCurrency(largest.amount)}` : "—"}</strong></div><div><span>Change vs previous period · مقارنة بالفترة السابقة</span><strong>{changeLabel(comparison, true)}</strong></div></div></section>;
+  return <section className="expense-overview" aria-labelledby="expense-overview-title"><div><p className="eyebrow">Cost context · مراقبة المصاريف</p><h3 id="expense-overview-title">Expense composition · توزيع المصاريف</h3></div><div className="expense-overview__grid"><div><span>Share of revenue · نسبتها من المبيعات</span><strong>{percentValue(costShare)}</strong></div><div><span>Largest category · أكبر فئة</span><strong>{largest ? `${expenseLabels[largest.category]?.[0] ?? largest.category} · ${formatCurrency(largest.amount)}` : "—"}</strong></div></div></section>;
 }
 
 export function BusinessPlanningSnapshot({ query }) {
@@ -80,70 +72,80 @@ export function BusinessPlanningSnapshot({ query }) {
   return <div className="business-support-grid" aria-label="Planning and cost overview"><TargetActionPlan data={query.data} /><ExpenseOverview data={query.data} /></div>;
 }
 
-export function MonthlyRevenueGrowth({ query }) {
-  if (query.loading || query.error || !query.data) return null;
-  const comparison = query.data.comparisons.previousPeriod.totalRevenue;
-  const percentage = comparison.percentageDifference;
-  const direction = percentage === null ? "new" : comparison.direction;
-  const value = percentage === null ? "New" : `${percentage > 0 ? "+" : ""}${percentage}%`;
-  const partial = query.data.period.isPartial;
-  return <section className={`monthly-growth-card monthly-growth-card--${direction}`} aria-labelledby="monthly-growth-title"><span className="monthly-growth-card__icon" aria-hidden="true">{direction === "up" ? "↗" : direction === "down" ? "↘" : direction === "new" ? "+" : "→"}</span><div className="monthly-growth-card__copy"><p className="eyebrow">Monthly revenue growth · نمو المبيعات الشهري</p><h3 id="monthly-growth-title">Compared with the previous month · مقارنة بالشهر السابق</h3><p>{formatCurrency(comparison.current)} versus {formatCurrency(comparison.previous)}.{partial ? " The same elapsed days are compared." : ""}</p><p lang="ar" dir="rtl">{formatCurrency(comparison.current)} مقابل {formatCurrency(comparison.previous)}.{partial ? " تتم مقارنة نفس عدد الأيام المنقضية." : ""}</p></div><div className="monthly-growth-card__value"><strong>{value}</strong><span lang="ar" dir="rtl">{percentage === null ? "لا توجد نسبة سابقة" : "مقارنة بالشهر السابق"}</span></div></section>;
+export function BusinessEfficiencyStrip({ query }) {
+  if (!query.data || query.loading || query.error) return null;
+  const items = buildSecondaryKpis(query.data);
+  return <section className="business-efficiency" aria-labelledby="business-efficiency-title">
+    <div className="business-efficiency__heading"><p className="eyebrow">Efficiency · الكفاءة</p><h3 id="business-efficiency-title">Session efficiency</h3></div>
+    <dl className="business-efficiency__grid">{items.map((item) => <div key={item.key}>
+      <dt>{item.label}</dt>
+      <dd>{item.value}</dd>
+      {item.comparison ? <small className={`business-efficiency__comparison business-efficiency__comparison--${item.comparison.tone}`}>{item.comparison.label}</small> : item.description ? <small>{item.description}</small> : null}
+    </div>)}</dl>
+  </section>;
 }
 
 export function BusinessComparisonsAndInsights({ query }) {
   if (query.loading || query.error || !query.data) return null;
-  const { insights } = query.data;
+  const repeatedKpis = new Set(["period_profitable", "no_material_problem", "monitor_next_period"]);
+  const insights = query.data.insights.filter((item) => !repeatedKpis.has(item.code));
+  if (!insights.length) return null;
   const groups = [["positive", "Positive Indicators", "مؤشرات إيجابية", "✓"], ["warning", "Problems Detected", "مشاكل مكتشفة", "!"], ["recommendation", "Recommendations", "توصيات", "→"]];
+  const visibleGroups = groups.map(([type, label, arabicLabel, icon]) => ({
+    type, label, arabicLabel, icon, items: insights.filter((item) => item.type === type),
+  })).filter((group) => group.items.length);
   return <>
-    <section className="analytics-panel business-insights" aria-labelledby="analysis-insights-title"><div className="analytics-panel__heading"><div><p className="eyebrow">Deterministic analysis · تحليل رقمي ثابت</p><h3 id="analysis-insights-title">Evidence-based insights | تحليلات مبنية على الأرقام</h3></div><p>Rules use the selected and previous equivalent periods.<br /><span lang="ar" dir="rtl">تعتمد القواعد على الفترة المحددة والفترة السابقة المماثلة.</span></p></div><div className="insight-grid">{groups.map(([type, label, arabicLabel, icon]) => { const groupInsights = insights.filter((item) => item.type === type); return <section className={`insight-column insight-column--${type}`} key={type} aria-labelledby={`insight-${type}`}><div className="insight-column__heading"><span className="insight-column__icon" aria-hidden="true">{icon}</span><h4 id={`insight-${type}`}>{label}<span className="insight-heading-ar" lang="ar" dir="rtl">{arabicLabel}</span></h4><span className="insight-column__count">{groupInsights.length}</span></div><div className="insight-column__cards">{groupInsights.map((item) => { const translation = arabicInsight(item); return <article key={`${item.code}-${item.title}`}><strong>{item.title}</strong><strong className="insight-title-ar" lang="ar" dir="rtl">{translation.title}</strong><p>{item.message}</p><p className="insight-copy-ar" lang="ar" dir="rtl">{translation.message}</p></article>; })}</div></section>; })}</div></section>
+    <section className="analytics-panel business-insights" aria-labelledby="analysis-insights-title"><div className="analytics-panel__heading"><div><p className="eyebrow">Deterministic analysis · تحليل رقمي ثابت</p><h3 id="analysis-insights-title">Evidence-based insights | تحليلات مبنية على الأرقام</h3></div><p>Rules use the selected and previous equivalent periods.<br /><span lang="ar" dir="rtl">تعتمد القواعد على الفترة المحددة والفترة السابقة المماثلة.</span></p></div><div className="insight-grid">{visibleGroups.map(({ type, label, arabicLabel, icon, items }) => <section className={`insight-column insight-column--${type}`} key={type} aria-labelledby={`insight-${type}`}><div className="insight-column__heading"><span className="insight-column__icon" aria-hidden="true">{icon}</span><h4 id={`insight-${type}`}>{label}<span className="insight-heading-ar" lang="ar" dir="rtl">{arabicLabel}</span></h4><span className="insight-column__count">{items.length}</span></div><div className="insight-column__cards">{items.map((item) => { const translation = arabicInsight(item); return <article key={`${item.code}-${item.title}`}><strong>{item.title}</strong><strong className="insight-title-ar" lang="ar" dir="rtl">{translation.title}</strong><p>{item.message}</p><p className="insight-copy-ar" lang="ar" dir="rtl">{translation.message}</p></article>; })}</div></section>)}</div></section>
   </>;
 }
 
-export function ActivityPerformance({ query }) {
+export function ActivityPerformance({ query, period, parameters, businessId }) {
+  const stationQuery = useStationPerformance(period, parameters, businessId);
   if (query.loading) return <div className="business-view"><AnalyticsLoading /></div>;
   if (query.error) return <div className="business-view"><AnalyticsError onRetry={query.retry} /></div>;
-  return <div className="business-view"><ActivityRevenueShare activities={query.data.activities} currency={query.data.period.currency} /></div>;
+  return <div className="business-view"><ActivityRevenueShare activities={query.data.activities} currency={query.data.period.currency} /><ActivityOperations activities={query.data.activities} /><StationPerformance query={stationQuery} /></div>;
 }
 
 export function BusinessOverview({ query }) {
-  if (query.loading || query.error || !query.data) return null;
+  if (query.loading) return <section className="business-overview business-overview--loading" aria-label="Loading business snapshot" aria-busy="true"><div className="skeleton-line skeleton-line--title" /><div className="business-snapshot__loading-grid">{[1, 2, 3].map((item) => <div className="skeleton-card" key={item} />)}</div></section>;
+  if (query.error) return <section className="business-overview"><AnalyticsError onRetry={query.retry} /></section>;
+  if (!query.data) return null;
   const { financial, period, statuses, decisionSupport } = query.data;
-  const ending = formatDate(period.endDateExclusive);
-  const state = statuses.profitability === "profitable"
-    ? ["Profit", "ربح"]
-    : statuses.profitability === "loss"
-      ? ["Loss", "خسارة"]
-      : ["Break-even", "تعادل"];
-  const scale = Math.max(financial.totalRevenue, financial.totalCosts, 1);
-  const salesWidth = Math.max(0, financial.totalRevenue / scale * 100);
-  const costsWidth = Math.max(0, financial.totalCosts / scale * 100);
-  const resultSign = financial.netProfit > 0 ? "+" : "";
-  const targetProgress = decisionSupport?.hasTarget ? Math.max(0, decisionSupport.revenueProgress ?? 0) : null;
+  const revenueComparison = comparisonDetails(query.data.comparisons?.previousPeriod?.totalRevenue, period);
+  const { revenue, costs, netProfit, profitBarWidth, costBarWidth, isLoss } = profitCostPresentation(financial);
+  const target = targetProgressPresentation(decisionSupport, revenue);
   const resultTone = statuses.profitability === "profitable" ? "green" : statuses.profitability === "loss" ? "red" : "yellow";
   return <section className={`business-overview business-overview--${resultTone}`} aria-labelledby="business-overview-title">
     <div className="business-overview__topline">
-      <p className="eyebrow">Business snapshot · نظرة سريعة</p>
-      <p className="business-overview__period"><span aria-hidden="true">◷</span> {formatDate(period.startDate)} → {ending}</p>
+      <div><p className="eyebrow">Business snapshot · نظرة سريعة</p><h2 id="business-overview-title">Business Snapshot</h2></div>
+      <p className="business-overview__period">{compactPeriodLabel(period)}</p>
     </div>
-    <div className="business-overview__visual">
-      <div className="business-overview__result">
-        <span className="business-overview__status"><i aria-hidden="true" />{state[0]} <b lang="ar" dir="rtl">· {state[1]}</b></span>
-        <strong id="business-overview-title">{resultSign}{formatCurrency(financial.netProfit)}</strong>
-        <small>Net result · صافي النتيجة</small>
-      </div>
-      <div className="business-overview__chart" role="img" aria-label={`Sales ${formatCurrency(financial.totalRevenue)}; costs ${formatCurrency(financial.totalCosts)}`}>
-        <div className="business-overview__bar-row business-overview__bar-row--sales">
-          <span>Sales · المبيعات</span><strong>{formatCurrency(financial.totalRevenue)}</strong>
-          <div aria-hidden="true"><i style={{ width: `${salesWidth}%` }} /></div>
-        </div>
-        <div className="business-overview__bar-row business-overview__bar-row--costs">
-          <span>Costs · المصاريف</span><strong>{formatCurrency(financial.totalCosts)}</strong>
-          <div aria-hidden="true"><i style={{ width: `${costsWidth}%` }} /></div>
-        </div>
-      </div>
+    {period.isPartial && <p className="business-overview__accounting-note">Revenue through current time · Scheduled period expenses included</p>}
+    <div className="business-snapshot__grid">
+      <article className={`business-snapshot__unified ${isLoss ? "business-snapshot__unified--loss" : ""}`}>
+        <section className="business-snapshot__revenue" aria-label="Revenue">
+          <span>{BUSINESS_COPY.metrics.revenue}</span>
+          <strong>{formatCurrency(revenue)}</strong>
+          {revenueComparison && <small className={`business-snapshot__comparison business-snapshot__comparison--${revenueComparison.tone}`}>{revenueComparison.label}</small>}
+        </section>
+
+        <section className={`business-snapshot__target ${target.state === "reached" || target.state === "exceeded" ? "business-snapshot__target--met" : ""}`} aria-label="Revenue target">
+          <div className="business-snapshot__card-heading"><span>Target progress</span>{target.hasTarget && <strong>{percentValue(target.progress)}</strong>}</div>
+          {target.hasTarget ? <>
+            <p><strong>{formatCurrency(revenue)}</strong><span> / {formatCurrency(target.target)}</span></p>
+            <div className="business-snapshot__progress" role="progressbar" aria-label="Revenue target progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(target.barWidth)} aria-valuetext={`${target.progress}%`}><i style={{ width: `${target.barWidth}%` }} /></div>
+            <small>{target.state === "exceeded" ? "Target exceeded" : target.state === "reached" ? "Target reached" : `${formatCurrency(target.remaining)} remaining`}</small>
+          </> : <div className="business-snapshot__empty"><strong>{BUSINESS_COPY.states.noTarget}</strong><small>Add one from Targets when you are ready.</small></div>}
+        </section>
+
+        <section className="business-snapshot__profit-costs" aria-label="Net profit and period expenses">
+          <div className="business-snapshot__card-heading"><span>Profit vs Costs</span>{isLoss && <strong>Loss</strong>}</div>
+          <div className="business-snapshot__bar-row business-snapshot__bar-row--profit"><p><span>{BUSINESS_COPY.metrics.netProfit}</span><strong className={isLoss ? "business-snapshot__loss-value" : ""}>{formatCurrency(netProfit)}</strong></p><div><i style={{ width: `${profitBarWidth}%` }} /></div></div>
+          <div className="business-snapshot__bar-row business-snapshot__bar-row--costs"><p><span>{BUSINESS_COPY.metrics.periodExpenses}</span><strong>{formatCurrency(costs)}</strong></p><div><i style={{ width: `${costBarWidth}%` }} /></div></div>
+          {revenue === 0 && costs === 0 && <small className="business-snapshot__zero">No revenue or expenses in this period.</small>}
+          {revenue === 0 && costs > 0 && <small className="business-snapshot__zero">Expenses were recorded with no revenue.</small>}
+        </section>
+      </article>
     </div>
-    {targetProgress !== null && <div className={`business-overview__target ${targetProgress >= 100 ? "business-overview__target--met" : ""}`}>
-      <span>Sales goal · هدف المبيعات</span><div aria-hidden="true"><i style={{ width: `${Math.min(100, targetProgress)}%` }} /></div><strong>{percentValue(targetProgress)}</strong>
-    </div>}
   </section>;
 }

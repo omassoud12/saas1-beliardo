@@ -103,10 +103,11 @@ function laterDate(left, right) { return left > right ? left : right; }
 function earlierDate(left, right) { return left < right ? left : right; }
 
 function activeOverlap(expense, startDate, endDateExclusive) {
-  const activeStart = laterDate(startDate, expense.startDate);
-  const activeEnd = expense.endDate
+  const activeStart = laterDate(laterDate(startDate, expense.startDate), expense.validFrom ?? expense.startDate);
+  let activeEnd = expense.endDate
     ? earlierDate(endDateExclusive, shiftDateKey(expense.endDate, 1))
     : endDateExclusive;
+  if (expense.validTo) activeEnd = earlierDate(activeEnd, expense.validTo);
   return activeEnd > activeStart ? { startDate: activeStart, endDateExclusive: activeEnd } : null;
 }
 
@@ -124,7 +125,11 @@ export function expenseCostForPeriod(expense, startDate, endDateExclusive) {
   if (!expense.includeInProfit) return 0;
   const amount = Number(expense.amountUsd) || 0;
   if (expense.recurrence === "one_time") {
-    return expense.occurrenceDate >= startDate && expense.occurrenceDate < endDateExclusive ? roundMoney(amount) : 0;
+    const withinVersion = expense.occurrenceDate >= (expense.validFrom ?? expense.startDate)
+      && (!expense.validTo || expense.occurrenceDate < expense.validTo);
+    return withinVersion && expense.occurrenceDate >= startDate && expense.occurrenceDate < endDateExclusive
+      ? roundMoney(amount)
+      : 0;
   }
   const overlap = activeOverlap(expense, startDate, endDateExclusive);
   if (!overlap) return 0;

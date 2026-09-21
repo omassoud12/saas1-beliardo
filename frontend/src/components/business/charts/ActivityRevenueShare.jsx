@@ -29,17 +29,18 @@ export function ActivityRevenueShare({ activities, currency = "USD" }) {
       arabicLabel: arabicLabels[series.key],
       revenue: Number(activity.revenue || 0),
       sessions: Number(activity.sessions || 0),
+      share: activity.revenueShare === null || activity.revenueShare === undefined ? 0 : Number(activity.revenueShare),
     };
   });
-  const totalRevenue = data.reduce((sum, item) => sum + item.revenue, 0);
-  const chartData = data.map((item) => ({ ...item, share: totalRevenue ? item.revenue / totalRevenue * 100 : 0 }));
+  const hasRevenue = data.some((item) => item.revenue > 0);
+  const chartData = data;
 
   return <section className="analytics-panel activity-share-panel" aria-labelledby="activity-share-title">
     <div className="analytics-panel__heading">
       <div><p className="eyebrow">Revenue mix · توزيع المبيعات</p><h3 id="activity-share-title">Sales by activity · المبيعات حسب النشاط</h3></div>
       <p>Each color shows the activity's share of total sales.<br /><span lang="ar" dir="rtl">كل لون يوضح حصة النشاط من إجمالي المبيعات.</span></p>
     </div>
-    {totalRevenue <= 0 ? <div className="chart-empty"><span aria-hidden="true">○</span><p>No paid activity was recorded for this period.<br /><span lang="ar" dir="rtl">لا توجد مبيعات مسجلة خلال هذه الفترة.</span></p></div> : <div className="activity-share-layout">
+    {!hasRevenue ? <div className="chart-empty"><span aria-hidden="true">○</span><p>No paid activity was recorded for this period.<br /><span lang="ar" dir="rtl">لا توجد مبيعات مسجلة خلال هذه الفترة.</span></p></div> : <div className="activity-share-layout">
       <div className="activity-share-donut" role="img" aria-label={`Activity revenue shares: ${chartData.map((item) => `${item.label} ${item.share.toFixed(1)} percent`).join(", ")}`}>
         <ResponsiveContainer width="100%" height="100%">
           <PieChart>
@@ -49,7 +50,7 @@ export function ActivityRevenueShare({ activities, currency = "USD" }) {
             <Tooltip content={<ShareTooltip currency={currency} />} />
           </PieChart>
         </ResponsiveContainer>
-        <div className="activity-share-donut__total"><span>Total sales<br /><b lang="ar" dir="rtl">إجمالي المبيعات</b></span><strong>{formatCurrency(totalRevenue, currency)}</strong></div>
+        <div className="activity-share-donut__total"><span>Revenue mix<br /><b lang="ar" dir="rtl">مزيج الإيرادات</b></span></div>
       </div>
       <div className="activity-share-list">
         {chartData.map((item) => <article key={item.type} style={{ "--activity-share-color": CHART_COLORS[item.type] }}>

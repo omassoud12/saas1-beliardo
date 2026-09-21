@@ -32,12 +32,12 @@ test("missing analytics RPC is detected for the direct-query fallback", () => {
 
 test("analytics fallback applies the 06:00 business date and aggregates activities", () => {
   const rows = [
-    { ended_at: "2026-08-27T02:30:00.000Z", final_elapsed_seconds: 1800, final_cost: 5, station: { type: "billiard" } },
+    { ended_at: "2026-08-27T02:30:00.000Z", final_elapsed_seconds: 1800, final_cost: 5, station_type_at_completion: "playstation", station: { type: "billiard" } },
     { ended_at: "2026-08-27T03:30:00.000Z", final_elapsed_seconds: 3600, final_cost: 10, station: { type: "billiard" } },
     { ended_at: "2026-08-27T03:45:00.000Z", final_elapsed_seconds: 900, final_cost: 4, station: [{ type: "playstation" }] },
   ];
   assert.deepEqual(aggregateSessionRows(rows, "day", "Asia/Beirut"), [
-    row("2026-08-26", "billiard", 1, 1800, 5),
+    row("2026-08-26", "playstation", 1, 1800, 5),
     row("2026-08-27", "billiard", 1, 3600, 10),
     row("2026-08-27", "playstation", 1, 900, 4),
   ]);
@@ -66,6 +66,7 @@ test("daily analytics reconcile activities and expose open session count", async
         started_at: "2026-08-23T22:30:00Z", paused_at: null,
         ended_at: "2026-08-24T01:15:00Z", total_paused_seconds: 0,
         final_elapsed_seconds: 9900, final_cost: 33,
+        station_type_at_completion: "playstation", station_number_at_completion: 7,
         station: { type: "billiard", number: 2 },
       }];
     },
@@ -79,7 +80,8 @@ test("daily analytics reconcile activities and expose open session count", async
   assert.equal(result.metrics.revenue, 19);
   assert.equal(result.traffic.length, 24);
   assert.equal(result.concurrencySessions.length, 1);
-  assert.equal(result.concurrencySessions[0].activity, "billiard");
+  assert.equal(result.concurrencySessions[0].activity, "playstation");
+  assert.equal(result.concurrencySessions[0].stationNumber, 7);
   assert.equal(result.sessions[0].controllerCount, 3);
   assertReconciles(result, result.traffic);
 });

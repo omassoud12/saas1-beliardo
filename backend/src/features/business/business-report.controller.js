@@ -33,6 +33,7 @@ export async function listBusinessReports(request, response, next) {
     const data = await businessReportService.list({
       businessId: request.auth.businessId,
       timezone: request.auth.timezone,
+      ...request.validated,
     });
     return response.status(200).json({ success: true, data });
   } catch (error) {

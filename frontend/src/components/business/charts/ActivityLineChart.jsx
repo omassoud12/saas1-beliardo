@@ -11,11 +11,16 @@ const ACTIVITY_COLORS = {
   pingpong: "var(--activity-chart-ping-pong)",
 };
 
-export function ActivityLineChart({ sessions = [], period, date, loading = false, error = null, onRetry }) {
+export function ActivityLineChart({ sessions = [], period, date, metrics, loading = false, error = null, onRetry }) {
   const data = useMemo(() => buildConcurrencyBuckets(sessions, period), [sessions, period]);
   const { hidden, toggle } = useChartSeries();
   const description = `${formatDate(date)} / 6:00 AM to 6:00 AM`;
-  return <AnalyticsChartPanel className="chart-panel--activity-pulse" titleId="activity-by-time-title" eyebrow="Live pulse" title="Business Day Active Sessions" description={description} loading={loading} error={error} onRetry={onRetry} hasData={hasChartData(data)} hidden={hidden} onToggle={toggle} data={data} unit="sessions" legend={false}>
+  const peakConcurrency = data.reduce((best, row) => row.total > best.total ? row : best, { total: 0, tooltipLabel: "—" });
+  const completionHour = metrics?.peakHour
+    ? new Intl.DateTimeFormat("en-US", { timeZone: period?.timezone || "UTC", hour: "numeric" }).format(new Date(`${metrics.peakHour}:00Z`))
+    : "—";
+  const summary = metrics && <dl className="monthly-chart-summary busy-hours-summary"><div><dt>Sessions ending in busiest hour</dt><dd>{metrics.peakActivity}</dd><small>{completionHour}</small></div><div><dt>Peak simultaneous active sessions</dt><dd>{peakConcurrency.total}</dd><small>{peakConcurrency.total ? peakConcurrency.tooltipLabel : "No active-session peak"}</small></div><div><dt>Chart meaning</dt><dd>Occupancy</dd><small>Maximum active at the same time—not session endings</small></div></dl>;
+  return <AnalyticsChartPanel className="chart-panel--activity-pulse" titleId="activity-by-time-title" eyebrow="Live pulse" title="Business Day Active Sessions" description={description} loading={loading} error={error} onRetry={onRetry} hasData={hasChartData(data)} hidden={hidden} onToggle={toggle} data={data} unit="sessions" legend={false} summary={summary}>
     <p className="sr-only">Maximum simultaneously active sessions during each hourly interval. Use the legend buttons to toggle a series and the accessible table for exact values.</p>
     <div className="business-chart" role="img" aria-label={`Activity by time area and line chart. ${description}`}>
       <ResponsiveContainer width="100%" height="100%">

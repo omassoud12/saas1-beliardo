@@ -633,6 +633,8 @@ test("create request validation accepts only bounded integer controller counts",
   assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 0 } }).success, false);
   assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 2.5 } }).success, false);
   assert.equal(validateCreateSession({ params: {}, body: { stationId, controllerCount: 100 } }).success, false);
+  assert.equal(validateCreateSession({ params: {}, body: { stationId: "legacy-ps_01", hourlyRate: 2 } }).success, true);
+  assert.equal(validateCreateSession({ params: {}, body: { stationId: "../legacy", hourlyRate: 2 } }).success, false);
 });
 
 test("update request validation accepts a live controller count change", () => {

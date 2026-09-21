@@ -36,6 +36,32 @@ test("open and currently paused sessions use the correct effective end", () => {
   assert.equal(rows[1].pingpong, 1);
 });
 
+test("completed and resumed sessions exclude every recorded pause interval", () => {
+  const rows = buildConcurrencyBuckets([
+    {
+      activity: "playstation", status: "completed", startedAt: "2026-08-24T00:00:00Z", endedAt: "2026-08-24T03:00:00Z",
+      pauseIntervals: [
+        { startedAt: "2026-08-24T00:20:00Z", endedAt: "2026-08-24T00:50:00Z" },
+        { startedAt: "2026-08-24T01:00:00Z", endedAt: "2026-08-24T02:00:00Z" },
+      ],
+    },
+    {
+      activity: "billiard", status: "active", startedAt: "2026-08-24T00:00:00Z",
+      pauseIntervals: [{ startedAt: "2026-08-24T00:15:00Z", endedAt: "2026-08-24T01:30:00Z" }],
+    },
+  ], period);
+  assert.deepEqual(rows.map((row) => row.playstation), [1, 0, 1]);
+  assert.deepEqual(rows.map((row) => row.billiard), [1, 1, 1]);
+});
+
+test("pause clipping honors the selected business-period boundary", () => {
+  const rows = buildConcurrencyBuckets([{
+    activity: "pingpong", status: "completed", startedAt: "2026-08-23T23:00:00Z", endedAt: "2026-08-24T02:00:00Z",
+    pauseIntervals: [{ startedAt: "2026-08-23T23:30:00Z", endedAt: "2026-08-24T01:00:00Z" }],
+  }], period);
+  assert.deepEqual(rows.map((row) => row.pingpong), [0, 1, 0]);
+});
+
 test("revenue series preserve zeros and combined totals", () => {
   const rows = buildRevenueSeries([
     { key: "2026-08-01", activities: [{ type: "ps", revenue: 1200.5 }, { type: "pool", revenue: 300 }] },

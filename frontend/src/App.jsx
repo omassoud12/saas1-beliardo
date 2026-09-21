@@ -15,6 +15,7 @@ import {
 import { Home } from "./pages/Home";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
 import { PublicRouter } from "./public/PublicRouter";
+import { invalidateBusinessRequestCache } from "./lib/businessRequestCache";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
 const Employees = lazy(() => import("./pages/Employees").then((module) => ({ default: module.Employees })));
@@ -365,11 +366,13 @@ function AuthenticatedApp({ access }) {
       });
       setSelectedStationId(null);
       setFinishedToday((current) => current + 1);
+      invalidateBusinessRequestCache(access.tenant.id);
       showNotice(`${getStationName(currentStation)} closed · Final total ${formatMoney(session.finalCost)}`);
     } catch (error) {
       const reconciled = await reconcileSessionAction(sessionId, error);
       if (reconciled.refreshed && !reconciled.session) {
         setSelectedStationId(null);
+        invalidateBusinessRequestCache(access.tenant.id);
         showNotice(`${getStationName(currentStation)} closed · Status confirmed`);
         return;
       }
@@ -377,7 +380,7 @@ function AuthenticatedApp({ access }) {
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [access.tenant.id, beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleCancel = useCallback(async () => {
     const currentStation = stations.find((station) => station.id === selectedStationId);
@@ -397,11 +400,13 @@ function AuthenticatedApp({ access }) {
         return next;
       });
       setSelectedStationId(null);
+      invalidateBusinessRequestCache(access.tenant.id);
       showNotice(`${getStationName(currentStation)} session cancelled`);
     } catch (error) {
       const reconciled = await reconcileSessionAction(sessionId, error);
       if (reconciled.refreshed && !reconciled.session) {
         setSelectedStationId(null);
+        invalidateBusinessRequestCache(access.tenant.id);
         showNotice(`${getStationName(currentStation)} session status refreshed`);
         return;
       }
@@ -409,7 +414,7 @@ function AuthenticatedApp({ access }) {
     } finally {
       finishSessionAction();
     }
-  }, [beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
+  }, [access.tenant.id, beginSessionAction, finishSessionAction, reconcileSessionAction, selectedStationId, sessionIds, showNotice, stations, updateSelectedStation]);
 
   const handleViewChange = useCallback((nextView) => {
     if (nextView !== "home" && nextView !== "employees" && !access.permissions.viewAnalytics) return;
@@ -471,7 +476,7 @@ function AuthenticatedApp({ access }) {
             onEdit={(station) => setStationForm({ station })}
             onDelete={handleDeleteStation}
           /></Suspense>
-        ) : view === "employees" && access.permissions.manageEmployees ? <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading employees"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Employees /></Suspense> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} /></Suspense>}
+        ) : view === "employees" && access.permissions.manageEmployees ? <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading employees"><div className="skeleton-panel skeleton-panel--tall" /></div>}><Employees /></Suspense> : <Suspense fallback={<div className="analytics-skeleton" aria-label="Loading analytics"><div className="skeleton-panel skeleton-panel--tall" /></div>}><BusinessAnalytics key={businessDate} businessDate={businessDate} businessId={access.tenant.id} /></Suspense>}
       </main>
 
       {selectedStation && (

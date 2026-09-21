@@ -36,7 +36,7 @@ function reportDate(value) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(new Date(value));
 }
 
-const emptyLibrary = { loading: false, error: "", quota: null, reports: [] };
+const emptyLibrary = { loading: false, error: "", quota: null, reports: [], pagination: null };
 
 export function BusinessReportExport({ reportType, date, year, month, theme = "dark" }) {
   const [open, setOpen] = useState(false);
@@ -44,6 +44,7 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
   const [status, setStatus] = useState({ generating: false, error: "", success: "" });
   const [library, setLibrary] = useState(emptyLibrary);
   const [downloadingId, setDownloadingId] = useState(null);
+  const [reportPage, setReportPage] = useState(1);
   const submittingRef = useRef(false);
   const period = periodLabel({ reportType, date, year, month });
 
@@ -62,8 +63,8 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
     if (!open) return undefined;
     const controller = new AbortController();
     setLibrary((current) => ({ ...current, loading: true, error: "" }));
-    getBusinessReportExports(controller.signal)
-      .then((data) => setLibrary({ loading: false, error: "", quota: data.quota, reports: data.reports }))
+    getBusinessReportExports(reportPage, 10, controller.signal)
+      .then((data) => setLibrary({ loading: false, error: "", quota: data.quota, reports: data.reports, pagination: data.pagination }))
       .catch((error) => {
         if (error.name !== "AbortError") {
           setLibrary((current) => ({
@@ -74,7 +75,7 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
         }
       });
     return () => controller.abort();
-  }, [open]);
+  }, [open, reportPage]);
 
   useEffect(() => {
     if (!open) return undefined;
@@ -98,8 +99,8 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
   };
 
   const refreshLibrary = async () => {
-    const data = await getBusinessReportExports();
-    setLibrary({ loading: false, error: "", quota: data.quota, reports: data.reports });
+    const data = await getBusinessReportExports(reportPage, 10);
+    setLibrary({ loading: false, error: "", quota: data.quota, reports: data.reports, pagination: data.pagination });
   };
 
   const generate = async (event) => {
@@ -173,7 +174,7 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
               {status.error && <p className="business-report-message business-report-message--error" role="alert">{status.error}</p>}
               {status.success && <p className="business-report-message business-report-message--success" role="status">{status.success}</p>}
               <section className="business-report-library" aria-labelledby="saved-business-reports-title">
-                <div className="business-report-library__header"><h3 id="saved-business-reports-title">Saved reports</h3><span>{library.reports.length}</span></div>
+                <div className="business-report-library__header"><h3 id="saved-business-reports-title">Saved reports</h3><span>{library.pagination?.total ?? library.reports.length}</span></div>
                 {library.error ? <p className="business-report-library__empty">{library.error}</p> : !library.loading && library.reports.length === 0 ? <p className="business-report-library__empty">No saved reports yet.</p> : (
                   <div className="business-report-library__list">{library.reports.map((report) => (
                     <div className="business-report-library__row" key={report.id}>
@@ -182,6 +183,7 @@ export function BusinessReportExport({ reportType, date, year, month, theme = "d
                     </div>
                   ))}</div>
                 )}
+                {library.pagination && library.pagination.total > library.pagination.pageSize && <div className="record-pagination"><button className="button button--secondary" type="button" disabled={library.pagination.page <= 1 || busy} onClick={() => setReportPage(library.pagination.page - 1)}>Previous</button><span>Showing {(library.pagination.page - 1) * library.pagination.pageSize + 1}–{(library.pagination.page - 1) * library.pagination.pageSize + library.reports.length} of {library.pagination.total}</span><button className="button button--secondary" type="button" disabled={!library.pagination.hasMore || busy} onClick={() => setReportPage(library.pagination.page + 1)}>Next</button></div>}
               </section>
               <footer>
                 <button className="button button--secondary" type="button" onClick={close} disabled={busy}>Cancel</button>

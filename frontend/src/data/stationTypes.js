@@ -29,12 +29,13 @@ export function getStationName(station) {
   return `${type.sessionLabel} ${String(station.number).padStart(2, "0")}`;
 }
 
-export function createStation({ type, number, hourlyRate }) {
+export function createStation({ type, number, hourlyRate, exchangeRate }) {
   return {
     id: globalThis.crypto?.randomUUID?.() ?? `station-${Date.now()}-${Math.random().toString(16).slice(2)}`,
     type,
     number: Number(number),
     hourlyRate: Number(hourlyRate),
+    exchangeRate: Number(exchangeRate),
     status: "available",
     sessionStartAt: null,
     pausedAt: null,

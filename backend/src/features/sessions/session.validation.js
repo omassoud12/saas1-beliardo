@@ -1,4 +1,5 @@
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const stationIdPattern = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$/;
 
 function success(data) {
   return { success: true, data };
@@ -59,8 +60,8 @@ export function validateCreateSession(request) {
   const rate = parseRate(request.body?.hourlyRate);
   const controllerCount = parseControllerCount(request.body?.controllerCount);
   const errors = [];
-  if (typeof stationId !== "string" || !uuidPattern.test(stationId)) {
-    errors.push("stationId must be a valid UUID");
+  if (typeof stationId !== "string" || !stationIdPattern.test(stationId)) {
+    errors.push("stationId is invalid");
   }
   if (rate.error) errors.push(rate.error);
   if (controllerCount.error) errors.push(controllerCount.error);

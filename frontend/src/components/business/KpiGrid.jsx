@@ -10,10 +10,12 @@ export function KpiGrid({ items, eyebrow, title }) {
               <span>{item.label}</span>
             </div>
             <strong>{item.value}</strong>
-            <p>{item.description}</p>
+            {item.comparison && <p className={`business-kpi__comparison business-kpi__comparison--${item.comparison.tone}`}>{item.comparison.label}</p>}
+            {item.description && <p className="business-kpi__description">{item.description}</p>}
           </article>
         ))}
       </div>
+      {items.length > 2 && <span className="business-kpi-scroll-hint" aria-hidden="true">Swipe to view all metrics →</span>}
     </section>
   );
 }

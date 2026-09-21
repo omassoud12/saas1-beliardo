@@ -1,23 +1,38 @@
 import { useCallback, useEffect, useState } from "react";
-import { getBusinessAnalysis, getDailySummary, getMonthlySummary, getYearlySummary } from "../lib/businessSummaryApi";
+import { getBusinessAnalysis, getBusinessOverview, getDailySummary, getMonthlySummary, getStationPerformance, getYearlySummary } from "../lib/businessSummaryApi";
+import { invalidateBusinessRequest, readBusinessRequest } from "../lib/businessRequestCache";
 
-function useQuery(load, dependencies) {
-  const [state, setState] = useState({ data: null, error: null, loading: true });
+function useQuery(load, dependencies, enabled = true, cacheKey = null) {
+  const requestKey = JSON.stringify([enabled, ...dependencies]);
+  const [state, setState] = useState({ requestKey: null, data: null, error: null, loading: true });
   const [revision, setRevision] = useState(0);
-  const retry = useCallback(() => setRevision((value) => value + 1), []);
+  const retry = useCallback(() => {
+    if (cacheKey) invalidateBusinessRequest(cacheKey);
+    setRevision((value) => value + 1);
+  }, [cacheKey]);
 
   useEffect(() => {
-    const controller = new AbortController();
-    setState((current) => ({ ...current, error: null, loading: true }));
-    load(controller.signal)
-      .then((data) => setState({ data, error: null, loading: false }))
+    if (!enabled) return undefined;
+    const controller = cacheKey ? null : new AbortController();
+    let cancelled = false;
+    setState({ requestKey, data: null, error: null, loading: true });
+    const request = cacheKey
+      ? readBusinessRequest(cacheKey, () => load(undefined))
+      : load(controller.signal);
+    request
+      .then((data) => {
+        if (!cancelled) setState({ requestKey, data, error: null, loading: false });
+      })
       .catch((error) => {
-        if (error.name !== "AbortError") setState({ data: null, error, loading: false });
+        if (error.name !== "AbortError" && !cancelled) setState({ requestKey, data: null, error, loading: false });
       });
-    return () => controller.abort();
-  }, [...dependencies, revision]);
+    return () => { cancelled = true; controller?.abort(); };
+  }, [...dependencies, revision, enabled, requestKey, cacheKey]);
 
-  return { ...state, retry };
+  const current = state.requestKey === requestKey
+    ? state
+    : { requestKey, data: null, error: null, loading: true };
+  return { ...current, retry };
 }
 
 export function useDailySummary(date) {
@@ -32,7 +47,20 @@ export function useYearlySummary(year) {
   return useQuery((signal) => getYearlySummary(year, signal), [year]);
 }
 
-export function useBusinessAnalysis(period, parameters) {
+export function useBusinessAnalysis(period, parameters, enabled = true, businessId = "unknown") {
   const key = JSON.stringify(parameters);
-  return useQuery((signal) => getBusinessAnalysis(period, parameters, signal), [period, key]);
+  const cacheKey = `business:${businessId}:analysis:${period}:${key}`;
+  return useQuery((signal) => getBusinessAnalysis(period, parameters, signal), [period, key], enabled, cacheKey);
+}
+
+export function useBusinessOverview(period, parameters, enabled = true, businessId = "unknown") {
+  const key = JSON.stringify(parameters);
+  const cacheKey = `business:${businessId}:overview:${period}:${key}`;
+  return useQuery((signal) => getBusinessOverview(period, parameters, signal), [period, key], enabled, cacheKey);
+}
+
+export function useStationPerformance(period, parameters, businessId = "unknown") {
+  const key = JSON.stringify(parameters);
+  const cacheKey = `business:${businessId}:stations:${period}:${key}`;
+  return useQuery((signal) => getStationPerformance(period, parameters, signal), [period, key], true, cacheKey);
 }

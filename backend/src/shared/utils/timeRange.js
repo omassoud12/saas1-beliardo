@@ -58,6 +58,21 @@ export function getMonthRange(year, month, timeZone) {
   };
 }
 
+export function getWeekStartDate(date) {
+  const [year, month, day] = date.split("-").map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day));
+  const daysSinceMonday = (value.getUTCDay() + 6) % 7;
+  value.setUTCDate(value.getUTCDate() - daysSinceMonday);
+  return value.toISOString().slice(0, 10);
+}
+
+export function getWeekRange(date, timeZone) {
+  const weekStart = getWeekStartDate(date);
+  const [year, month, day] = weekStart.split("-").map(Number);
+  const start = { year, month, day };
+  return getDateBoundaryRange(start, shiftLocalDate(start, { days: 7 }), timeZone);
+}
+
 export function getYearRange(year, timeZone) {
   const start = { year: Number(year), month: 1, day: 1, hour: BUSINESS_DAY_START_HOUR };
   const end = { year: Number(year) + 1, month: 1, day: 1, hour: BUSINESS_DAY_START_HOUR };

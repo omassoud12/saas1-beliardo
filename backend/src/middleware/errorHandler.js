@@ -10,7 +10,7 @@ export function errorHandler(error, _request, response, _next) {
       requestId: _request.requestId,
       method: _request.method,
       path: _request.path,
-      userId: _request.auth?.userId,
+      userId: _request.auth?.user?.id,
       businessId: _request.auth?.businessId,
       errorName: error.name,
       errorCode: error.code,

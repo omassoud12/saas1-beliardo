@@ -40,3 +40,10 @@ export function shiftDate(date, amount) {
   value.setUTCDate(value.getUTCDate() + amount);
   return value.toISOString().slice(0, 10);
 }
+
+export function startOfWeek(date) {
+  const value = new Date(`${date}T12:00:00Z`);
+  const daysSinceMonday = (value.getUTCDay() + 6) % 7;
+  value.setUTCDate(value.getUTCDate() - daysSinceMonday);
+  return value.toISOString().slice(0, 10);
+}

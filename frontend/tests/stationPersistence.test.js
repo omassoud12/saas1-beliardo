@@ -19,5 +19,6 @@ test("live timer and session state do not change the persisted configuration sig
 test("editable station configuration changes the persistence signature", () => {
   const baseline = stationConfigurationSignature([station]);
   assert.notEqual(stationConfigurationSignature([{ ...station, hourlyRate: 18 }]), baseline);
+  assert.notEqual(stationConfigurationSignature([{ ...station, exchangeRate: 90000 }]), baseline);
   assert.notEqual(stationConfigurationSignature([{ ...station, plannedStartAt: 1234 }]), baseline);
 });

@@ -6,6 +6,7 @@ import { renderPdf } from "./business-report.pdf.js";
 import { businessReportExportRepository } from "./business-report.repository.js";
 import { reportGenerationGate } from "./business-report.concurrency.js";
 import { businessAnalysisService } from "./business-analysis.service.js";
+import { businessOverviewService } from "./business-overview.service.js";
 
 const MONTHLY_EXPORT_LIMIT = 6;
 
@@ -50,7 +51,9 @@ export function createBusinessReportService({
   pdf = renderPdf,
   gate = reportGenerationGate,
   clock = () => new Date(),
+  dataLoader = null,
 } = {}) {
+  const composedLoader = dataLoader ?? (summaries === businessService ? businessOverviewService : null);
   return {
     async generate({ businessId, userId, timezone, config, signal }) {
       return gate.run(async () => {
@@ -72,17 +75,24 @@ export function createBusinessReportService({
         let uploaded = false;
         try {
           const method = config.reportType === "daily" ? "daily" : config.reportType === "monthly" ? "monthly" : "yearly";
-          const analysisPromise = summaries === businessService
-            ? businessAnalysisService.analyze({
+          let business;
+          let summary;
+          let analysis;
+          if (composedLoader) {
+            ({ business, summary, analysis } = await composedLoader.load({
               businessId, timezone, period: method,
               date: config.date, year: config.year, month: config.month,
-            })
-            : Promise.resolve(null);
-          const [business, summary, analysis] = await Promise.all([
-            repository.findBusiness(businessId),
-            summaries[method]({ businessId, timezone, date: config.date, year: config.year, month: config.month }),
-            analysisPromise,
-          ]);
+              page: 1, pageSize: 100, includeBusiness: true,
+            }));
+          } else {
+            [business, summary, analysis] = await Promise.all([
+              repository.findBusiness(businessId),
+              summaries[method]({ businessId, timezone, date: config.date, year: config.year, month: config.month }),
+              summaries === businessService
+                ? businessAnalysisService.analyze({ businessId, timezone, period: method, date: config.date, year: config.year, month: config.month })
+                : Promise.resolve(null),
+            ]);
+          }
           if (!business) throw new AppError(404, "Business not found", "BUSINESS_NOT_FOUND");
           const document = createReportDocument({ ...config, business, summary, analysis, timezone, generatedAt });
           const buffer = Buffer.from(await pdf(document, signal));
@@ -107,12 +117,13 @@ export function createBusinessReportService({
       });
     },
 
-    async list({ businessId, timezone }) {
+    async list({ businessId, timezone, page = 1, pageSize = 20 }) {
       const month = quotaMonthAt(clock(), timezone);
-      const result = await exports.getStatus({ businessId, quotaMonth: month });
+      const result = await exports.getStatus({ businessId, quotaMonth: month, page, pageSize });
       return {
         quota: { limit: MONTHLY_EXPORT_LIMIT, used: result.used, remaining: Math.max(0, MONTHLY_EXPORT_LIMIT - result.used), month },
         reports: result.reports.map(({ storagePath: _storagePath, ...report }) => report),
+        pagination: result.pagination ?? { total: result.reports.length, page: 1, pageSize: result.reports.length || pageSize, hasMore: false },
       };
     },
 

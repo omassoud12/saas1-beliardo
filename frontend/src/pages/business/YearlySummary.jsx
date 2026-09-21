@@ -1,13 +1,12 @@
-import { ActivityBreakdown } from "../../components/business/ActivityBreakdown";
 import { YearlyRevenueBarChart } from "../../components/business/charts/YearlyRevenueBarChart";
 import { KpiGrid } from "../../components/business/KpiGrid";
 import { PeriodNavigator } from "../../components/business/PeriodNavigator";
-import { useYearlySummary } from "../../hooks/useBusinessSummary";
 import { ACTIVITY_META, formatCurrency, formatHours, formatMonth } from "../../utils/analytics";
 import { BusinessComparisonsAndInsights, BusinessPlanningSnapshot } from "../../components/business/BusinessAnalysisPanels";
+import { FinancialTrendChart } from "../../components/business/charts/FinancialTrendChart";
 
-export function YearlySummary({ year, businessDate, onYearChange, onSelectMonth, showHeader = true, analysisQuery }) {
-  const query = useYearlySummary(year);
+export function YearlySummary({ year, businessDate, onYearChange, onSelectMonth, showHeader = true, analysisQuery, summaryQuery }) {
+  const query = summaryQuery;
   const currentYear = Number(businessDate.slice(0, 4));
   return (
     <div className="business-view">
@@ -18,6 +17,7 @@ export function YearlySummary({ year, businessDate, onYearChange, onSelectMonth,
         </PeriodNavigator>
       </header>}
       {analysisQuery && <BusinessPlanningSnapshot query={analysisQuery} />}
+      {analysisQuery && <FinancialTrendChart query={analysisQuery} />}
       {query.loading || query.error ? <YearlyRevenueBarChart year={year} loading={query.loading} error={query.error} onRetry={query.retry} /> : (
         <YearlyContent data={query.data} year={year} onSelectMonth={onSelectMonth} analysisQuery={analysisQuery} />
       )}
@@ -27,15 +27,12 @@ export function YearlySummary({ year, businessDate, onYearChange, onSelectMonth,
 
 function YearlyContent({ data, year, onSelectMonth, analysisQuery }) {
   const metrics = data.metrics;
-  const total = { sessions: metrics.sessionCount, hours: metrics.totalHours, totalSeconds: metrics.totalSeconds, revenue: metrics.revenue };
   return (
     <>
       <KpiGrid eyebrow="Operations · التشغيل" title="Year activity · نشاط السنة" items={[
         { label: "Tracked Days · الأيام المسجلة", value: metrics.trackedDays, description: "Unique days with activity · أيام فيها نشاط مكتمل", icon: "#" },
-        { label: "Sessions · الجلسات", value: metrics.sessionCount, description: "Completed this year · المكتملة هذه السنة", icon: "✓" },
         { label: "Yearly Hours · ساعات السنة", value: formatHours(metrics.totalHours), description: "Combined completed usage · إجمالي الاستخدام المكتمل", icon: "h" },
       ]} />
-      <ActivityBreakdown activities={data.activities} total={total} />
       <section className="analytics-panel yearly-months" aria-labelledby="month-summary-title">
         <div className="analytics-panel__heading"><div><p className="eyebrow">Year at a glance</p><h3 id="month-summary-title">Monthly summary</h3></div><p>Select a month to inspect its daily performance.</p></div>
         <div className="yearly-month-grid">

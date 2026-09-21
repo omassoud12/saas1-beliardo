@@ -24,6 +24,9 @@ function loadStations(storageKey) {
       ...station,
       number: Number(station.number),
       hourlyRate: Number(station.hourlyRate),
+      exchangeRate: Number.isFinite(Number(station.exchangeRate)) && Number(station.exchangeRate) > 0
+        ? Number(station.exchangeRate)
+        : null,
       status: ["available", "active", "paused"].includes(station.status)
         ? station.status
         : "available",

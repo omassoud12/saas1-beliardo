@@ -86,20 +86,26 @@ export const businessReportExportRepository = {
     await getSupabaseAdmin().storage.from(BUCKET).remove([storagePath]);
   },
 
-  async getStatus({ businessId, quotaMonth }) {
+  async getStatus({ businessId, quotaMonth, page = 1, pageSize = 20 }) {
     const client = getSupabaseAdmin();
+    const offset = (page - 1) * pageSize;
     const [countResult, reportsResult] = await Promise.all([
       client.from("business_report_exports").select("id", { count: "exact", head: true })
         .eq("business_id", businessId).eq("quota_month", quotaMonth).eq("status", "completed"),
       client.from("business_report_exports")
-        .select("id, report_type, period_key, filename, config, size_bytes, created_at, completed_at, storage_path")
+        .select("id, report_type, period_key, filename, config, size_bytes, created_at, completed_at, storage_path", { count: "exact" })
         .eq("business_id", businessId).eq("status", "completed")
-        .order("completed_at", { ascending: false }),
+        .order("completed_at", { ascending: false }).order("id", { ascending: false })
+        .range(offset, offset + pageSize - 1),
     ]);
     throwDatabaseError(countResult.error);
     throwDatabaseError(reportsResult.error);
     const used = countResult.count ?? 0;
-    return { used, reports: (reportsResult.data ?? []).map(mapExport) };
+    const total = reportsResult.count ?? 0;
+    return {
+      used, reports: (reportsResult.data ?? []).map(mapExport),
+      pagination: { total, page, pageSize, hasMore: offset + (reportsResult.data?.length ?? 0) < total },
+    };
   },
 
   async findCompleted(businessId, exportId) {

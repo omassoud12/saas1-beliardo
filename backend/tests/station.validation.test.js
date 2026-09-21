@@ -37,3 +37,19 @@ test("station sync accepts an empty list used to delete the last station", () =>
     data: { stations: [] },
   });
 });
+
+test("station sync accepts a positive exchange rate and safely supports legacy stations", () => {
+  const withExchangeRate = station("station-1");
+  withExchangeRate.exchangeRate = 90000;
+  assert.equal(validateStationSync({ body: { stations: [withExchangeRate] } }).data.stations[0].exchangeRate, 90000);
+
+  assert.equal(validateStationSync({ body: { stations: [station("station-1")] } }).success, true);
+});
+
+test("station sync rejects non-positive exchange rates", () => {
+  for (const exchangeRate of [0, -1, "not-a-number"]) {
+    assert.equal(validateStationSync({
+      body: { stations: [{ ...station("station-1"), exchangeRate }] },
+    }).success, false);
+  }
+});

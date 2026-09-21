@@ -59,16 +59,34 @@ export function summarizeMonthlyRevenue(data) {
   };
 }
 
-function sessionInterval(session, periodStart, periodEnd) {
+function sessionIntervals(session, periodStart, periodEnd) {
   const rawStart = new Date(session.startedAt).getTime();
-  if (!Number.isFinite(rawStart)) return null;
+  if (!Number.isFinite(rawStart)) return [];
   let rawEnd = session.endedAt ? new Date(session.endedAt).getTime() : periodEnd;
   if (session.status === "paused" && session.pausedAt) {
     rawEnd = Math.min(rawEnd, new Date(session.pausedAt).getTime());
   }
   const start = Math.max(rawStart, periodStart);
   const end = Math.min(Number.isFinite(rawEnd) ? rawEnd : periodEnd, periodEnd);
-  return end > start ? { start, end, type: normalizeActivityType(session.activity) } : null;
+  if (end <= start) return [];
+
+  const pauses = (session.pauseIntervals ?? []).map((interval) => ({
+    start: new Date(interval.startedAt).getTime(),
+    end: new Date(interval.endedAt).getTime(),
+  })).filter((interval) => Number.isFinite(interval.start) && Number.isFinite(interval.end) && interval.end > interval.start)
+    .sort((left, right) => left.start - right.start);
+  const type = normalizeActivityType(session.activity);
+  const intervals = [];
+  let cursor = start;
+  for (const pause of pauses) {
+    if (pause.end <= cursor || pause.start >= end) continue;
+    const pauseStart = Math.max(cursor, pause.start);
+    if (pauseStart > cursor) intervals.push({ start: cursor, end: pauseStart, type });
+    cursor = Math.max(cursor, Math.min(end, pause.end));
+    if (cursor >= end) break;
+  }
+  if (cursor < end) intervals.push({ start: cursor, end, type });
+  return intervals;
 }
 
 function maximumConcurrency(intervals, bucketStart, bucketEnd, type) {
@@ -94,7 +112,7 @@ export function buildConcurrencyBuckets(sessions, period, intervalMinutes = 60) 
   const end = new Date(period?.to).getTime();
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return [];
   const intervalMs = intervalMinutes * 60 * 1000;
-  const intervals = (sessions ?? []).map((session) => sessionInterval(session, start, end)).filter(Boolean);
+  const intervals = (sessions ?? []).flatMap((session) => sessionIntervals(session, start, end));
   const formatter = new Intl.DateTimeFormat("en-US", {
     timeZone: period.timezone || "UTC", hour: "numeric",
     ...(intervalMinutes < 60 ? { minute: "2-digit" } : {}),

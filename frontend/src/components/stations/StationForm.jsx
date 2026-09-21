@@ -6,6 +6,7 @@ export function StationForm({ station, stations, onClose, onSave }) {
   const [type, setType] = useState(station?.type ?? "billiard");
   const [number, setNumber] = useState(station?.number ?? "");
   const [hourlyRate, setHourlyRate] = useState(station?.hourlyRate ?? "");
+  const [exchangeRate, setExchangeRate] = useState(station?.exchangeRate ?? "");
   const [error, setError] = useState("");
   const dialogRef = useRef(null);
   const closeButtonRef = useRef(null);
@@ -47,6 +48,7 @@ export function StationForm({ station, stations, onClose, onSave }) {
     event.preventDefault();
     const parsedNumber = Number(number);
     const parsedRate = Number(hourlyRate);
+    const parsedExchangeRate = Number(exchangeRate);
 
     if (!Number.isInteger(parsedNumber) || parsedNumber < 1 || parsedNumber > 999) {
       setError("Enter a station number between 1 and 999.");
@@ -54,6 +56,10 @@ export function StationForm({ station, stations, onClose, onSave }) {
     }
     if (!Number.isFinite(parsedRate) || parsedRate <= 0 || parsedRate > 999) {
       setError("Enter an hourly rate greater than $0 and below $1,000.");
+      return;
+    }
+    if ((!isEditing || exchangeRate !== "") && (!Number.isFinite(parsedExchangeRate) || parsedExchangeRate <= 0)) {
+      setError("Enter an exchange rate greater than 0.");
       return;
     }
 
@@ -65,7 +71,12 @@ export function StationForm({ station, stations, onClose, onSave }) {
       return;
     }
 
-    onSave({ type, number: parsedNumber, hourlyRate: parsedRate });
+    onSave({
+      type,
+      number: parsedNumber,
+      hourlyRate: parsedRate,
+      ...(exchangeRate === "" ? {} : { exchangeRate: parsedExchangeRate }),
+    });
   };
 
   return (
@@ -143,6 +154,22 @@ export function StationForm({ station, stations, onClose, onSave }) {
                 />
               </span>
               <small>Used automatically for new sessions</small>
+            </label>
+
+            <label className="field station-form-dialog__exchange-rate">
+              <span>Exchange Rate (USD → LBP)</span>
+              <span className="field__control">
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  inputMode="decimal"
+                  value={exchangeRate}
+                  onChange={(event) => { setExchangeRate(event.target.value); setError(""); }}
+                  placeholder="90000"
+                />
+              </span>
+              <small>Used only to display this station’s session total in LBP</small>
             </label>
           </div>
 

@@ -27,9 +27,24 @@ export async function getBusinessAnalysis(period, parameters, signal) {
   return payload.data.analysis;
 }
 
-export async function getBusinessExpenses(signal) {
-  const payload = await apiRequest("/business/expenses", { signal });
-  return payload.data.expenses;
+export async function getBusinessOverview(period, parameters, signal) {
+  const payload = await apiRequest(`/business/overview?${query({ period, ...parameters })}`, { signal });
+  return payload.data.overview;
+}
+
+export async function getBusinessExpenses(page = 1, pageSize = 20, signal) {
+  const payload = await apiRequest(`/business/expenses?${query({ page, pageSize })}`, { signal });
+  return { items: payload.data.expenses, pagination: payload.data.pagination };
+}
+
+export async function getBusinessExpenseHistory(page = 1, pageSize = 20, signal) {
+  const payload = await apiRequest(`/business/expenses/history?${query({ page, pageSize })}`, { signal });
+  return { items: payload.data.expenses, pagination: payload.data.pagination };
+}
+
+export async function getStationPerformance(period, parameters, signal) {
+  const payload = await apiRequest(`/business/station-performance?${query({ period, ...parameters })}`, { signal });
+  return payload.data.stationPerformance;
 }
 
 export async function saveBusinessExpense(values, expenseId) {
@@ -44,9 +59,9 @@ export async function deleteBusinessExpense(expenseId) {
   await apiRequest(`/business/expenses/${expenseId}`, { method: "DELETE" });
 }
 
-export async function getBusinessTargets(signal) {
-  const payload = await apiRequest("/business/targets", { signal });
-  return payload.data.targets;
+export async function getBusinessTargets(page = 1, pageSize = 20, signal) {
+  const payload = await apiRequest(`/business/targets?${query({ page, pageSize })}`, { signal });
+  return { items: payload.data.targets, pagination: payload.data.pagination };
 }
 
 export async function saveBusinessTarget(values, targetId) {
@@ -102,8 +117,8 @@ export function downloadBusinessReport(config) {
   });
 }
 
-export async function getBusinessReportExports(signal) {
-  const payload = await apiRequest("/business/reports", { signal });
+export async function getBusinessReportExports(page = 1, pageSize = 10, signal) {
+  const payload = await apiRequest(`/business/reports?${query({ page, pageSize })}`, { signal });
   return payload.data;
 }
 

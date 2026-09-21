@@ -14,6 +14,8 @@ import {
   zonedTimeToTimestamp,
 } from "../utils/session";
 
+const lbpFormatter = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 });
+
 export function SessionPanel({
   station,
   onClose,
@@ -53,6 +55,10 @@ export function SessionPanel({
   const displayNow = confirmationMode === "end" ? (selectedEnd ?? pendingEndAt ?? now) : now;
   const elapsed = getElapsedSeconds(station, displayNow);
   const cost = getCurrentCost(station, displayNow);
+  const exchangeRate = Number(station.exchangeRate);
+  const lbpTotal = Number.isFinite(exchangeRate) && exchangeRate > 0
+    ? cost * exchangeRate
+    : null;
   const effectiveStartAt = station.sessionStartAt ?? station.plannedStartAt ?? now;
   const stationType = STATION_TYPES[station.type];
   const isPlayStation = station.type === "playstation";
@@ -230,6 +236,9 @@ export function SessionPanel({
           <div className="session-readout__cost">
             <span className="readout-label">Current cost</span>
             <strong>{formatMoney(cost)}</strong>
+            {lbpTotal !== null && (
+              <span className="session-readout__lbp">{lbpFormatter.format(lbpTotal)} LBP</span>
+            )}
             <small>{isPlayStation
               ? `${normalizedControllerCount} controller${normalizedControllerCount === 1 ? "" : "s"} at ${formatMoney(station.hourlyRate)} = ${formatMoney(effectiveHourlyRate)} / hour`
               : `at ${formatMoney(station.hourlyRate)} / hour`}</small>

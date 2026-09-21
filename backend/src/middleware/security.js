@@ -25,7 +25,7 @@ function limiter({ windowMs, limit, identifier, code, message, keyGenerator, ski
 }
 
 const tenantKey = (request) => request.auth?.businessId ?? "missing-business";
-const actorKey = (request) => `${request.auth?.businessId ?? "missing-business"}:${request.auth?.userId ?? "missing-user"}`;
+const actorKey = (request) => `${request.auth?.businessId ?? "missing-business"}:${request.auth?.user?.id ?? "missing-user"}`;
 
 export function createApiRateLimiter({ windowMs = 5 * 60_000, limit = 300 } = {}) {
   return limiter({

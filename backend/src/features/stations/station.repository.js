@@ -3,7 +3,7 @@ import { getSupabaseDataClient } from "../../middleware/requestContext.js";
 import { throwDatabaseError } from "../../shared/utils/database.js";
 
 const stationFields = `
-  id, business_id, type, number, hourly_rate, status,
+  id, business_id, type, number, hourly_rate, exchange_rate, status,
   session_start_at, paused_at, total_paused_ms, planned_start_at
 `;
 
@@ -15,6 +15,9 @@ export function mapStation(row) {
     type: row.type,
     number: row.number,
     hourlyRate: Number(row.hourly_rate),
+    exchangeRate: row.exchange_rate === null || row.exchange_rate === undefined
+      ? null
+      : Number(row.exchange_rate),
     status: row.status,
     sessionStartAt: row.session_start_at,
     pausedAt: row.paused_at,
