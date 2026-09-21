@@ -7,9 +7,13 @@ export function useAuthSession() {
   useEffect(() => {
     if (!supabase) return undefined;
     let mounted = true;
-    supabase.auth.getSession().then(({ data }) => {
-      if (mounted) setState({ session: data.session, loading: false });
-    });
+    supabase.auth.getSession()
+      .then(({ data, error }) => {
+        if (mounted) setState({ session: error ? null : data.session, loading: false });
+      })
+      .catch(() => {
+        if (mounted) setState({ session: null, loading: false });
+      });
     const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
       if (mounted) setState({ session, loading: false });
     });

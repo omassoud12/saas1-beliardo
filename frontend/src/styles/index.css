@@ -1492,6 +1492,31 @@ input[type="time"]::-webkit-calendar-picker-indicator {
   }
 }
 
+@media (max-height: 760px) {
+  .session-overlay { padding: 8px; }
+  .session-panel { max-height: calc(100dvh - 16px); }
+  .session-panel__header { padding: 14px 18px 10px; }
+  .session-panel h2 { font-size: 1.5rem; }
+  .session-panel .icon-button { width: 34px; height: 34px; }
+  .session-readout { margin-inline: 18px; }
+  .session-readout > div { padding: 13px 16px; }
+  .readout-label { margin-bottom: 6px; }
+  .session-timer { font-size: clamp(1.75rem, 5vw, 2.35rem); }
+  .session-readout__cost strong { font-size: clamp(1.7rem, 4.6vw, 2.15rem); }
+  .session-readout__lbp { margin-top: 5px; font-size: 0.8rem; }
+  .session-readout small { margin-top: 6px; }
+  .session-fields { gap: 10px 14px; padding: 11px 18px 12px; }
+  .field > span:first-child { margin-bottom: 5px; }
+  .field__control { height: 40px; }
+  .field small { margin-top: 4px; font-size: 0.63rem; }
+  .session-actions { min-height: 0; gap: 8px; padding: 9px 18px; }
+  .session-actions--live { gap: 8px; }
+  .session-actions__primary { gap: 8px; }
+  .cancel-session-area { padding-top: 8px; }
+  .session-actions .button { min-height: 42px; }
+  .session-actions .button--cancel { min-height: 34px; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -4554,6 +4579,28 @@ button.calendar-day:hover {
 }
 .auth-card input:hover { border-color: rgba(145, 213, 173, 0.36); }
 .auth-card input:focus { border-color: var(--public-green); outline: none; box-shadow: 0 0 0 3px rgba(145, 213, 173, 0.1); }
+.auth-password-field { position: relative; display: block; }
+.auth-password-field input { padding-right: 48px; }
+.auth-password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  display: grid;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--public-muted);
+  cursor: pointer;
+}
+.auth-password-toggle:hover { color: var(--public-text); background: rgba(145, 213, 173, 0.06); }
+.auth-password-toggle:focus-visible { outline: 2px solid var(--public-green); outline-offset: -2px; }
+.auth-password-toggle svg { width: 19px; height: 19px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.auth-password-hint { color: var(--public-muted); font-size: 0.7rem; font-weight: 450; line-height: 1.45; }
 .public-auth-site .public-button--primary { border-color: #91d5ad; background: #91d5ad; color: #0c110f; }
 .public-auth-site .public-button--primary:hover { border-color: #a8dfbd; background: #a8dfbd; }
 .public-auth-site .public-button--secondary:hover { border-color: rgba(145, 213, 173, 0.46); background: rgba(145, 213, 173, 0.06); }
@@ -4604,6 +4651,22 @@ button.calendar-day:hover {
 .auth-support-note span { color: var(--public-muted); font-size: 0.76rem; line-height: 1.5; }
 .auth-account-actions { display: grid; gap: 10px; }
 .auth-account-actions .public-button { width: 100%; }
+.auth-status-icon {
+  display: grid;
+  width: 46px;
+  height: 46px;
+  margin: 0 auto 18px;
+  place-items: center;
+  border: 1px solid rgba(145, 213, 173, 0.35);
+  border-radius: 50%;
+  color: var(--public-green);
+  font-weight: 800;
+}
+.auth-email { color: var(--public-text); overflow-wrap: anywhere; }
+.auth-support-copy { margin-top: -10px !important; font-size: 0.78rem !important; }
+.auth-secondary-action--center { margin: 4px auto 0; padding: 8px 12px; }
+.auth-account-actions .auth-feedback { margin-bottom: 4px; }
+.auth-state-feedback { margin: -8px 0 18px; }
 
 .auth-alert {
   display: grid;
@@ -4634,6 +4697,21 @@ button.calendar-day:hover {
 
 @keyframes auth-spin { to { transform: rotate(360deg); } }
 
+@media (max-height: 820px) {
+  .auth-page { padding-block: 14px; }
+  .auth-card--form { padding: 20px 26px; }
+  .auth-card--form .auth-brand-lockup { display: none; }
+  .auth-card--form .eyebrow { margin-bottom: 6px; }
+  .auth-card--form h1 { font-size: 1.72rem; }
+  .auth-card--form > p:not(.eyebrow) { margin: 8px 0 14px; line-height: 1.42; }
+  .auth-card--form form { gap: 10px; }
+  .auth-card--form label { gap: 4px; }
+  .auth-card--form input { min-height: 44px; }
+  .auth-card--form .auth-password-toggle { width: 38px; height: 38px; }
+  .auth-card--form .auth-mode-switch { margin-top: 12px; padding-top: 12px; }
+  .auth-card--form .auth-secondary-action { margin-top: 8px; }
+}
+
 @media (max-width: 1120px) {
   .sign-out-button { order: 4; }
 }
@@ -4649,4 +4727,27 @@ button.calendar-day:hover {
   .auth-card { padding: 26px 20px; }
   .auth-brand-lockup { margin-bottom: 24px; padding-bottom: 18px; }
   .auth-card h1 { font-size: 1.8rem; }
+  .auth-account-actions .public-button { min-height: 48px; white-space: normal; }
+}
+
+@media (max-width: 620px) and (max-height: 720px) {
+  .auth-page { padding: 8px 10px; }
+  .auth-card--form { padding: 14px 16px; }
+  .auth-card--form .eyebrow { margin-bottom: 4px; font-size: 0.62rem; }
+  .auth-card--form h1 { font-size: 1.45rem; }
+  .auth-card--form > p:not(.eyebrow) { margin: 5px 0 9px; font-size: 0.78rem; line-height: 1.35; }
+  .auth-card--form form { gap: 7px; }
+  .auth-card--form label { gap: 3px; font-size: 0.7rem; }
+  .auth-card--form input { min-height: 40px; font-size: 0.84rem; }
+  .auth-card--form .auth-password-toggle { width: 36px; height: 36px; }
+  .auth-card--form .auth-password-hint { font-size: 0.62rem; line-height: 1.25; }
+  .auth-card--form .public-button--large { min-height: 42px; }
+  .auth-card--form .auth-mode-switch { margin-top: 8px; padding-top: 8px; }
+  .auth-card--form .auth-secondary-action { margin-top: 5px; }
+}
+
+@media (max-width: 350px) {
+  .auth-page { padding-inline: 10px; }
+  .auth-card { padding: 22px 16px; }
+  .auth-card h1 { font-size: 1.65rem; }
 }

@@ -1,325 +1,131 @@
-import { useEffect, useRef, useState } from "react";
-import { useAuthSession } from "../hooks/useAuthSession";
-import carouselActiveSessions from "../assets/carousel-active-sessions.png";
-import carouselDailySummary from "../assets/carousel-daily-summary.png";
-import carouselStationManagement from "../assets/carousel-station-management.png";
-import loungeHeroDashboard from "../assets/lounge-hero-dashboard.png";
-import { PUBLIC_BRAND, PUBLIC_ROUTES } from "./brand";
+import { useEffect } from "react";
+import businessActivityScreenshotSmall from "../assets/landing-business-activity-small.webp";
+import businessActivityScreenshot from "../assets/landing-business-activity.webp";
+import stationManagementScreenshotSmall from "../assets/landing-station-management-small.webp";
+import stationManagementScreenshot from "../assets/landing-station-management.webp";
+import heroDashboardSmall from "../assets/lounge-hero-dashboard-small.webp";
+import heroDashboard from "../assets/lounge-hero-dashboard.webp";
+import { PUBLIC_ROUTES } from "./brand";
 import { PublicFooter, PublicNavbar, SectionHeading } from "./PublicLayout";
 import { usePublicMetadata } from "./metadata";
 
-const screenshots = Object.freeze({
-  floor: { src: "/assets/product-screenshots/live-floor-overview.png", width: 1905, height: 820, alt: "Lounge Hell live floor showing available billiard and ping-pong stations in one operational overview" },
-  stations: { src: "/assets/product-screenshots/station-management.png", width: 1915, height: 796, alt: "Lounge Hell station management screen with billiard tables, hourly rates, and edit controls" },
-});
-
-const platformSlides = Object.freeze([
-  {
-    src: screenshots.floor.src,
-    width: screenshots.floor.width,
-    height: screenshots.floor.height,
-    title: "Live floor",
-    category: "Operations",
-    description: "See every available and active station in one view.",
-    alt: screenshots.floor.alt,
-  },
-  {
-    src: carouselStationManagement,
-    width: 1680,
-    height: 945,
-    title: "Station control",
-    category: "Configuration",
-    description: "Keep equipment and hourly pricing organized.",
-    alt: "Lounge Hell station management showing three billiard tables, hourly rates, and edit controls",
-  },
-  {
-    src: carouselDailySummary,
-    width: 1680,
-    height: 945,
-    title: "Business summary",
-    category: "Daily clarity",
-    description: "Review sessions, usage, peak activity, and revenue.",
-    alt: "Lounge Hell daily business summary showing session, hours, peak activity, and revenue totals",
-  },
-  {
-    src: carouselActiveSessions,
-    width: 1680,
-    height: 945,
-    title: "Activity analytics",
-    category: "Business rhythm",
-    description: "See session activity by hour and activity type.",
-    alt: "Lounge Hell active sessions chart showing hourly billiard and ping-pong session activity",
-  },
-]);
+const trustPoints = [
+  ["Built for", "PlayStation, billiard & ping-pong"],
+  ["Live operations", "Session timing and cost"],
+  ["Owner visibility", "Business analytics"],
+  ["Team access", "Employee permissions"],
+];
 
 const transformations = [
-  {
-    from: "Notebook",
-    to: "Live workspace",
-    title: "No more handwritten session records.",
-    description: "Every station, start time, status, and completed session stays organized in one live workspace.",
-  },
-  {
-    from: "Mental calculation",
-    to: "Automatic clarity",
-    title: "No more repeated calculations.",
-    description: "Elapsed time and session cost remain clear, consistent, and connected to the station being used.",
-  },
-  {
-    from: "Guessing",
-    to: "Measurable performance",
-    title: "See how the business changes over time.",
-    description: "Review daily and monthly performance to understand activity, revenue, and business growth.",
-  },
+  { from: "Notebook", to: "Live workspace", title: "Keep every session in one place.", description: "Stations, start times, statuses, and completed sessions stay organized on one live floor." },
+  { from: "Mental calculation", to: "Automatic clarity", title: "Let the system track time and cost.", description: "Elapsed time and session cost stay connected to the station and its configured pricing." },
+  { from: "Guessing", to: "Recorded performance", title: "Review what actually happened.", description: "Completed sessions flow into clear revenue, expense, and activity reporting." },
 ];
 
-const operations = [
-  ["Open a station", "Choose an available station from the live floor."],
-  ["Start and control the session", "Start, pause, resume, or keep the session as service changes."],
-  ["Track elapsed time and cost", "Duration and configured pricing remain visible together."],
-  ["End the session", "Close the session with its final time and cost recorded."],
-  ["Review the result", "Completed activity flows into the business reporting view."],
+const operatingSteps = ["Station", "Start session", "Track time & cost", "End session", "Business data"];
+const setupSteps = ["Create account", "Confirm email", "Approval", "Configure lounge", "Start"];
+const analyticsValues = ["Revenue & expenses", "Completed sessions", "Busy periods", "Activity & station performance"];
+const faqs = [
+  ["Who is Lounge Hall for?", "It is built for lounges that run PlayStation, billiard, ping-pong, or a mix of these activities."],
+  ["What happens after I contact you?", "Choose a contact channel and tell us about your lounge and the plan you want to activate."],
+  ["How does account approval work?", "Create the Owner account, confirm its email address, and wait for the required Platform Admin approval before access begins."],
+  ["Can employees use the system?", "Yes. Owners can add employees and manage their access while keeping Owner-level controls separate."],
+  ["What does the subscription provide access to?", "The Lounge Hall workspace includes station and session management, configured pricing, employee access, and Business reporting."],
 ];
 
-const onboarding = [
-  ["Create your Owner account", "Register the lounge and its Owner details."],
-  ["Confirm your email", "Verify the address linked to the new account."],
-  ["Receive Platform Admin approval", "Access begins only after the required platform review."],
-  ["Configure stations and pricing", "Add the equipment and hourly rates used on the floor."],
-  ["Start managing operations", "Open the live floor and manage the first session."],
-];
-
-function HeroActions() {
-  const { session, loading } = useAuthSession();
-  return <div className="public-hero__actions">
-    {loading ? <span className="public-account-loading" aria-label="Checking account session" /> : <a className="public-button public-button--primary public-button--large" href={session ? PUBLIC_ROUTES.login : PUBLIC_ROUTES.register}>{session ? "Open Dashboard" : "Create Your Account"}</a>}
-    <a className="public-button public-button--secondary public-button--large" href="#how-it-works">See How It Works</a>
-  </div>;
-}
-
-function ProductCarousel() {
-  const [activeIndex, setActiveIndex] = useState(0);
-  const [timerRevision, setTimerRevision] = useState(0);
-  const [isHovered, setIsHovered] = useState(false);
-  const [hasFocus, setHasFocus] = useState(false);
-  const [isTouching, setIsTouching] = useState(false);
-  const [isInViewport, setIsInViewport] = useState(false);
-  const [isDocumentVisible, setIsDocumentVisible] = useState(() => typeof document === "undefined" || document.visibilityState !== "hidden");
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches);
-  const carouselRef = useRef(null);
-  const touchStart = useRef(null);
-  const autoplayPaused = isHovered || hasFocus || isTouching || !isInViewport || !isDocumentVisible || prefersReducedMotion;
-
-  const resetAutoplay = () => setTimerRevision((revision) => revision + 1);
-  const showPrevious = () => {
-    setActiveIndex((index) => (index - 1 + platformSlides.length) % platformSlides.length);
-    resetAutoplay();
-  };
-  const showNext = () => {
-    setActiveIndex((index) => (index + 1) % platformSlides.length);
-    resetAutoplay();
-  };
-  const showSlide = (index) => {
-    setActiveIndex(index);
-    resetAutoplay();
-  };
-
-  useEffect(() => {
-    const node = carouselRef.current;
-    if (!node || typeof IntersectionObserver === "undefined") {
-      setIsInViewport(true);
-      return undefined;
-    }
-
-    const observer = new IntersectionObserver(([entry]) => {
-      setIsInViewport(entry.isIntersecting && entry.intersectionRatio >= 0.35);
-    }, { threshold: [0, 0.35, 1] });
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => setIsDocumentVisible(document.visibilityState !== "hidden");
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, []);
-
-  useEffect(() => {
-    const mediaQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const handleMotionPreference = (event) => setPrefersReducedMotion(event.matches);
-    mediaQuery.addEventListener("change", handleMotionPreference);
-    return () => mediaQuery.removeEventListener("change", handleMotionPreference);
-  }, []);
-
-  useEffect(() => {
-    if (autoplayPaused) return undefined;
-    const timer = window.setTimeout(() => {
-      const modalOpen = document.querySelector('dialog[open], [role="dialog"][aria-modal="true"]');
-      if (modalOpen) {
-        setTimerRevision((revision) => revision + 1);
-        return;
-      }
-      setActiveIndex((index) => (index + 1) % platformSlides.length);
-    }, 3000);
-    return () => window.clearTimeout(timer);
-  }, [activeIndex, autoplayPaused, timerRevision]);
-
-  const handleKeyDown = (event) => {
-    if (event.key === "ArrowLeft") {
-      event.preventDefault();
-      showPrevious();
-    } else if (event.key === "ArrowRight") {
-      event.preventDefault();
-      showNext();
-    }
-  };
-
-  const handlePointerDown = (event) => {
-    if (event.pointerType !== "touch") return;
-    touchStart.current = { x: event.clientX, y: event.clientY };
-    setIsTouching(true);
-    resetAutoplay();
-    event.currentTarget.setPointerCapture?.(event.pointerId);
-  };
-
-  const handlePointerUp = (event) => {
-    if (event.pointerType !== "touch") return;
-    setIsTouching(false);
-    if (!touchStart.current) return;
-    const distanceX = event.clientX - touchStart.current.x;
-    const distanceY = event.clientY - touchStart.current.y;
-    touchStart.current = null;
-    event.currentTarget.releasePointerCapture?.(event.pointerId);
-
-    if (Math.abs(distanceX) < 45 || Math.abs(distanceX) <= Math.abs(distanceY)) return;
-    if (distanceX > 0) showPrevious();
-    else showNext();
-  };
-
-  return <div
-    className="public-product-carousel"
-    ref={carouselRef}
-    role="region"
-    aria-roledescription="carousel"
-    aria-label="Lounge Hell product screenshots"
-    tabIndex="0"
-    onKeyDown={handleKeyDown}
-    onPointerDown={handlePointerDown}
-    onPointerUp={handlePointerUp}
-    onPointerCancel={() => { touchStart.current = null; setIsTouching(false); }}
-    onMouseEnter={() => setIsHovered(true)}
-    onMouseLeave={() => setIsHovered(false)}
-    onFocus={() => setHasFocus(true)}
-    onBlur={(event) => { if (!event.currentTarget.contains(event.relatedTarget)) setHasFocus(false); }}
-  >
-    <div className="public-product-carousel__viewport">
-      <div className="public-product-carousel__track">
-        {platformSlides.map((slide, index) => <figure
-          className={`public-product-carousel__slide${index === activeIndex ? " is-active" : ""}`}
-          key={slide.title}
-          role="group"
-          aria-roledescription="slide"
-          aria-label={`${index + 1} of ${platformSlides.length}: ${slide.title}`}
-          aria-hidden={index !== activeIndex}
-        >
-          <img
-            src={slide.src}
-            width={slide.width}
-            height={slide.height}
-            alt={slide.alt}
-            loading="lazy"
-            decoding="async"
-            draggable="false"
-          />
-          <figcaption>
-            <span>{slide.category}</span>
-            <strong>{slide.title}</strong>
-            <p>{slide.description}</p>
-          </figcaption>
-        </figure>)}
-      </div>
-    </div>
-
-    <div className="public-product-carousel__navigation">
-      <button type="button" onClick={showPrevious} aria-label="Show previous product screenshot">
-        <span aria-hidden="true">←</span> Previous
-      </button>
-      <div className="public-product-carousel__pagination" aria-label="Choose product screenshot">
-        {platformSlides.map((slide, index) => <button
-          type="button"
-          key={slide.title}
-          className={index === activeIndex ? "is-active" : ""}
-          onClick={() => showSlide(index)}
-          aria-label={`Show ${slide.title}`}
-          aria-current={index === activeIndex ? "true" : undefined}
-        ><span>{String(index + 1).padStart(2, "0")}</span></button>)}
-      </div>
-      <button type="button" onClick={showNext} aria-label="Show next product screenshot">
-        Next <span aria-hidden="true">→</span>
-      </button>
-    </div>
-    <p className="public-product-carousel__status" aria-live={autoplayPaused ? "polite" : "off"}>{platformSlides[activeIndex].title}, slide {activeIndex + 1} of {platformSlides.length}</p>
-  </div>;
+function CompactFlow({ label, title, steps }) {
+  return <article className="public-workflow-card">
+    <p className="public-workflow-card__label">{label}</p>
+    <h3>{title}</h3>
+    <ol>{steps.map((step, index) => <li key={step}><span>{String(index + 1).padStart(2, "0")}</span><strong>{step}</strong></li>)}</ol>
+  </article>;
 }
 
 export function LandingPage() {
-  usePublicMetadata({ title: "Lounge Hell | Smart Lounge Management" });
+  usePublicMetadata({ title: "Lounge Hall | Smart Lounge Management", image: heroDashboard, structuredData: true });
+  useEffect(() => {
+    if (!window.location.hash) return undefined;
+    const targetId = decodeURIComponent(window.location.hash.slice(1));
+    const scrollToTarget = () => {
+      const target = document.getElementById(targetId);
+      if (!target) return;
+      const previousBehavior = document.documentElement.style.scrollBehavior;
+      document.documentElement.style.scrollBehavior = "auto";
+      target.scrollIntoView();
+      document.documentElement.style.scrollBehavior = previousBehavior;
+    };
+    const timers = [0, 150, 500].map((delay) => window.setTimeout(scrollToTarget, delay));
+    window.addEventListener("load", scrollToTarget);
+    return () => {
+      timers.forEach((timer) => window.clearTimeout(timer));
+      window.removeEventListener("load", scrollToTarget);
+    };
+  }, []);
+
   return <div className="public-site public-site--landing">
+    <a className="public-skip-link" href="#main-content">Skip to main content</a>
     <PublicNavbar currentPath="/" />
-    <main>
+    <main id="main-content">
       <section className="public-product-hero" aria-labelledby="public-hero-title">
         <div className="public-product-hero__backdrop" aria-hidden="true" />
         <div className="public-container public-product-hero__layout">
           <div className="public-product-hero__copy">
             <p className="public-kicker">Lounge operations, unified</p>
             <h1 id="public-hero-title">Every table. Every session. One system.</h1>
-            <p>Manage PlayStation, billiard, and ping-pong sessions with accurate timing, automatic billing, employee control, and clear business analytics.</p>
-            <HeroActions />
-            <p className="public-product-hero__signature"><span>by</span><a href={PUBLIC_BRAND.website} target="_blank" rel="noreferrer">{PUBLIC_BRAND.companyName}</a></p>
-            <ul className="public-product-hero__scope" aria-label="Supported lounge activities">
-              <li>PlayStation</li>
-              <li>Billiards</li>
-              <li>Ping Pong</li>
-            </ul>
+            <p>Manage PlayStation, billiard, and ping-pong sessions with accurate timing, automatic session cost calculation, employee access and permissions, and clear Business analytics.</p>
+            <div className="public-hero__actions">
+              <a className="public-button public-button--primary public-button--large" href={PUBLIC_ROUTES.contact}>Get Started</a>
+              <a className="public-button public-button--secondary public-button--large" href="#how-it-works">Explore the Product</a>
+            </div>
           </div>
-
           <div className="public-product-hero__visual">
-            <figure className="public-hero-product-frame">
-              <img
-                src={loungeHeroDashboard}
-                width="1672"
-                height="941"
-                alt="Lounge Hell station management dashboard"
-                fetchpriority="high"
-                decoding="async"
-              />
-            </figure>
+            <figure className="public-hero-product-frame"><img src={heroDashboard} srcSet={`${heroDashboardSmall} 836w, ${heroDashboard} 1672w`} sizes="(max-width: 900px) calc(100vw - 32px), 58vw" width="1672" height="941" alt="Lounge Hall live floor showing available billiard and ping-pong stations" fetchpriority="high" decoding="async" /></figure>
           </div>
         </div>
       </section>
 
+      <aside className="public-trust-strip" aria-label="Product capabilities"><div className="public-container">
+        {trustPoints.map(([label, value]) => <p key={label}><span>{label}</span><strong>{value}</strong></p>)}
+      </div></aside>
+
       <section className="public-band public-band--problems" aria-labelledby="problems-title"><div className="public-container public-problem-layout">
-        <header className="public-section-heading"><p className="public-kicker">From manual work to control</p><h2 id="problems-title">Your lounge should not depend on a notebook.</h2><p>Lounge Hell replaces scattered notes, repeated calculations, and uncertain reporting with one clear operational system.</p></header>
+        <header className="public-section-heading"><p className="public-kicker">From manual work to control</p><h2 id="problems-title">Your lounge should not depend on a notebook.</h2><p>Lounge Hall replaces scattered notes and repeated calculations with one clear operational workspace.</p></header>
         <ol className="public-transformation-list">{transformations.map((item, index) => <li key={item.title}><span className="public-transformation-list__number">{String(index + 1).padStart(2, "0")}</span><div><p className="public-transformation-list__shift"><span>{item.from}</span><i aria-hidden="true">→</i><strong>{item.to}</strong></p><h3>{item.title}</h3><p>{item.description}</p></div></li>)}</ol>
       </div></section>
 
-      <section className="public-band public-product-story" id="product-tour" aria-labelledby="product-story-title"><div className="public-container public-editorial-product">
-        <div className="public-editorial-product__copy"><p className="public-kicker">Configure the floor</p><h2 id="product-story-title">Build the workspace around your equipment.</h2><p>Keep station setup and hourly rates organized in the same system your team uses every day.</p><dl className="public-product-observations"><div><dt>Equipment</dt><dd>Add and maintain the stations available to the lounge.</dd></div><div><dt>Pricing</dt><dd>Keep each station connected to its configured hourly rate.</dd></div><div><dt>Availability</dt><dd>Review current status before making a floor change.</dd></div></dl></div>
-        <figure className="public-editorial-product__visual"><img src={screenshots.stations.src} width={screenshots.stations.width} height={screenshots.stations.height} loading="lazy" decoding="async" alt={screenshots.stations.alt} /><figcaption><span>Station management</span><strong>Configuration stays connected to daily operations.</strong></figcaption></figure>
+      <section className="public-band public-how" id="how-it-works" aria-labelledby="how-title"><div className="public-container">
+        <SectionHeading kicker="One connected workflow" title="How Lounge Hall works" titleId="how-title">Run the floor clearly, then turn each completed session into useful Business data.</SectionHeading>
+        <div className="public-workflow-grid"><CompactFlow label="A / Daily operation" title="Running the lounge" steps={operatingSteps} /><CompactFlow label="B / Account setup" title="Getting set up" steps={setupSteps} /></div>
       </div></section>
 
-      <section className="public-band public-band--operations" id="features"><div className="public-container"><SectionHeading kicker="Daily workflow" title="Connected operations">One session moves through a clear sequence—from opening a station to reviewing the recorded result.</SectionHeading><ol className="public-operation-flow">{operations.map(([title, text], index) => <li key={title}><span>{String(index + 1).padStart(2, "0")}</span><h3>{title}</h3><p>{text}</p></li>)}</ol></div></section>
+      <section className="public-band public-capabilities" id="features" aria-labelledby="features-title"><div className="public-container">
+        <SectionHeading kicker="Product capabilities" title="The floor and the business stay connected" titleId="features-title">Two focused views cover the setup behind each station and the activity recorded across the day.</SectionHeading>
+        <div className="public-capability-list">
+          <figure className="public-capability"><figcaption><span>01 / Configuration</span><h3>Set up stations and pricing.</h3><p>Keep lounge equipment, availability, and hourly pricing organized before a session begins.</p></figcaption><div className="public-capability__media public-capability__media--configuration"><img src={stationManagementScreenshot} srcSet={`${stationManagementScreenshotSmall} 840w, ${stationManagementScreenshot} 1680w`} sizes="(max-width: 1080px) calc(100vw - 32px), 62vw" width="1680" height="945" loading="lazy" decoding="async" alt="Lounge Hall station management showing billiard tables, hourly rates, and edit controls" /></div></figure>
+          <figure className="public-capability public-capability--reverse"><figcaption><span>02 / Business activity</span><h3>See when the floor gets busy.</h3><p>Review activity by hour and type without separating operations from the sessions that produced the data.</p></figcaption><div className="public-capability__media public-capability__media--analytics"><img src={businessActivityScreenshot} srcSet={`${businessActivityScreenshotSmall} 840w, ${businessActivityScreenshot} 1680w`} sizes="(max-width: 1080px) calc(100vw - 32px), 62vw" width="1680" height="945" loading="lazy" decoding="async" alt="Lounge Hall active sessions chart showing hourly billiard and ping-pong activity" /></div></figure>
+        </div>
+        <div className="public-owner-value" id="analytics" aria-labelledby="analytics-title"><SectionHeading kicker="Business visibility" title="A clearer view for the owner" titleId="analytics-title">Review the facts behind each operating period.</SectionHeading><ul>{analyticsValues.map((value) => <li key={value}>{value}</li>)}</ul></div>
+      </div></section>
 
-      <section className="public-band public-band--how" id="how-it-works"><div className="public-container"><SectionHeading kicker="Getting started" title="How to start with Lounge Hell">Create your account, complete approval, and prepare your lounge for its first managed session.</SectionHeading><ol className="public-onboarding">{onboarding.map(([title, text], index) => <li key={title}><span>{String(index + 1).padStart(2, "0")}</span><div><h3>{title}</h3><p>{text}</p></div></li>)}</ol></div></section>
+      <section className="public-band public-product-story public-subscriptions" id="plans" aria-labelledby="plans-title"><div className="public-container">
+        <header className="public-subscriptions__heading"><p className="public-kicker">Subscription plans</p><h2 id="plans-title">Choose Your Plan</h2><p>Both plans provide access to the Lounge Hall operations and Business workspace.</p></header>
+        <div className="public-subscription-grid">
+          <a className="public-subscription-card" href={PUBLIC_ROUTES.contact} aria-label="Contact us for the $15 monthly plan with one free month on the first subscription"><span className="public-subscription-card__badge">First-time offer</span><h3>Monthly Plan</h3><p className="public-subscription-card__price" dir="ltr"><strong>$15</strong><span>/ month</span></p><p className="public-subscription-card__offer" lang="ar" dir="rtl">أول دفعة: <bdi>$15</bdi> مقابل شهرين</p><p className="public-subscription-card__description" lang="ar" dir="rtl">أول اشتراك بيعطيك شهر إضافي مجاناً، وبعدها <bdi>$15</bdi> بالشهر.</p><span className="public-subscription-card__action"><span>Contact Us for Monthly</span><span aria-hidden="true">→</span></span><span className="public-subscription-card__cue">Contact us to activate your account.</span></a>
+          <a className="public-subscription-card public-subscription-card--featured" href={PUBLIC_ROUTES.contact} aria-label="Contact us for the yearly plan, $150 for 13 months"><span className="public-subscription-card__badge">Best Value</span><h3>Yearly Plan</h3><p className="public-subscription-card__price" dir="ltr"><strong>$150</strong><span>/ 13 months</span></p><p className="public-subscription-card__offer" lang="ar" dir="rtl">اشتراك سنة + شهر مجاني</p><p className="public-subscription-card__description" lang="ar" dir="rtl">بتاخد <bdi>13</bdi> شهر كاملين بسعر <bdi>$150</bdi>.</p><span className="public-subscription-card__action"><span>Contact Us for Yearly</span><span aria-hidden="true">→</span></span><span className="public-subscription-card__cue">Contact us to activate your account.</span></a>
+        </div>
+      </div></section>
 
-      <section className="public-band public-band--analytics" id="analytics"><div className="public-container"><SectionHeading kicker="Business visibility" title="Business data becomes useful when it stays connected to the floor.">Move from completed sessions to a daily picture you can read, compare, and explain.</SectionHeading><div className="public-visibility-panels">
-        <figure className="public-visibility-panel"><figcaption><span>01 / Daily clarity</span><h3>See the whole business day.</h3><p>See sessions, completed activity, total hours, peak activity, and revenue in one business view.</p></figcaption><img src={carouselDailySummary} width="1680" height="945" loading="lazy" decoding="async" alt="Lounge Hell Daily Summary with total sessions, completed activity, total hours, peak activity, revenue, and activity breakdown" /></figure>
-        <figure className="public-visibility-panel public-visibility-panel--reverse"><figcaption><span>02 / Activity across the day</span><h3>Understand when the floor gets busy.</h3><p>See when PlayStation, billiard, and ping-pong activity rises throughout the operating day.</p></figcaption><img src={carouselActiveSessions} width="1680" height="945" loading="lazy" decoding="async" alt="Lounge Hell Business Day Active Sessions chart showing activity by hour for PlayStation, billiard, and ping-pong" /></figure>
-      </div></div></section>
+      <section className="public-approval" aria-labelledby="approval-title"><div className="public-container public-approval__inner">
+        <div><p className="public-kicker">Account access</p><h2 id="approval-title">A short, reviewed setup.</h2><p>Create your account, confirm your email, and receive approval before entering the workspace.</p></div>
+        <ol aria-label="Account approval steps"><li>Create account</li><li>Confirm email</li><li>Approval</li><li>Start</li></ol>
+      </div></section>
 
-      <section className="public-band public-platform-overview"><div className="public-container"><SectionHeading kicker="Product tour" title="One connected platform">The floor and the business stay in the same picture.</SectionHeading><ProductCarousel /></div></section>
+      <section className="public-band public-faq" aria-labelledby="faq-title"><div className="public-container public-faq__layout">
+        <SectionHeading kicker="Before you start" title="Frequently asked questions" titleId="faq-title">Clear answers about the product and account access.</SectionHeading>
+        <div className="public-faq__list">{faqs.map(([question, answer], index) => <details key={question} open={index === 0}><summary>{question}<span aria-hidden="true">+</span></summary><p>{answer}</p></details>)}</div>
+      </div></section>
 
-      <section className="public-final-cta"><div className="public-container"><p className="public-kicker">Take control of the floor</p><h2>Your lounge deserves a clearer operating system.</h2><p>Bring sessions, pricing, employees, and business performance into one controlled workspace.</p><div><a className="public-button public-button--primary public-button--large" href={PUBLIC_ROUTES.register}>Create Account</a><a className="public-button public-button--secondary public-button--large" href={PUBLIC_ROUTES.contact}>Contact Us</a></div><p className="public-final-signature">by <a href={PUBLIC_BRAND.website} target="_blank" rel="noreferrer">{PUBLIC_BRAND.companyName}</a></p></div></section>
+      <section className="public-final-cta" aria-labelledby="final-cta-title"><div className="public-container"><p className="public-kicker">Ready to begin?</p><h2 id="final-cta-title">Bring your lounge into one clear workspace.</h2><p>Contact us to discuss your lounge and activate the right plan.</p><div className="public-final-cta__actions"><a className="public-button public-button--primary public-button--large" href={PUBLIC_ROUTES.contact}>Get Started</a><a className="public-final-cta__account" href={PUBLIC_ROUTES.register}>Create your account <span>— approval required</span></a></div></div></section>
     </main>
     <PublicFooter />
   </div>;

@@ -1,5 +1,7 @@
+import { AUTH_ROUTES } from "../lib/authRouting";
+
 export const PUBLIC_BRAND = Object.freeze({
-  productName: "Lounge Hell",
+  productName: "Lounge Hall",
   companyName: "UltraScaling Solutions",
   website: "https://ultrascaling.com",
   description: "Manage PlayStation, billiard, and ping-pong sessions, pricing, employees, and business performance from one powerful SaaS platform.",
@@ -14,6 +16,5 @@ export const PUBLIC_BRAND = Object.freeze({
 export const PUBLIC_ROUTES = Object.freeze({
   home: "/",
   contact: "/contact",
-  login: "/login",
-  register: "/register",
+  ...AUTH_ROUTES,
 });

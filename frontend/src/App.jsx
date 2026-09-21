@@ -16,6 +16,7 @@ import { Home } from "./pages/Home";
 import { formatMoney, timeInputToTimestamp } from "./utils/session";
 import { PublicRouter } from "./public/PublicRouter";
 import { invalidateBusinessRequestCache } from "./lib/businessRequestCache";
+import { AUTH_ROUTES, isEmailConfirmed, resolvePostAuthRoute } from "./lib/authRouting";
 
 const Dashboard = lazy(() => import("./pages/Dashboard").then((module) => ({ default: module.Dashboard })));
 const Employees = lazy(() => import("./pages/Employees").then((module) => ({ default: module.Employees })));
@@ -25,19 +26,24 @@ const StationForm = lazy(() => import("./components/stations/StationForm").then(
 const BusinessAnalytics = lazy(() => import("./pages/business/BusinessAnalytics").then((module) => ({ default: module.BusinessAnalytics })));
 
 export default function App() {
-  return <PublicRouter renderAuth={({ mode, onModeChange }) => (
-    <AuthGate initialMode={mode} onModeChange={onModeChange}>{({ session, signOut }) => <AccessRouter session={session} onSignOut={signOut} />}</AuthGate>
+  return <PublicRouter renderAuth={({ mode, path, authCallback, navigate, onModeChange }) => (
+    <AuthGate initialMode={mode} path={path} authCallback={authCallback} navigate={navigate} onModeChange={onModeChange}>{({ session, signOut }) => <AccessRouter session={session} currentPath={path} navigate={navigate} onSignOut={signOut} />}</AuthGate>
   )} />;
 }
 
-function AccessRouter({ session, onSignOut }) {
+function AccessRouter({ session, currentPath, navigate, onSignOut }) {
   const passwordSetupKey = `password-setup.${session.user.id}`;
   const invitationAcceptanceRef = useRef({ token: null, promise: null });
   const [result, setResult] = useState({ loading: true, access: null, error: "", needsPassword: false, passwordReason: "invite" });
+  const [statusCheck, setStatusCheck] = useState({ pending: false, message: "" });
   useEffect(() => {
     let mounted = true;
     async function load() {
       try {
+        if (!isEmailConfirmed(session.user)) {
+          if (mounted) setResult({ loading: false, access: { state: "pending_email" }, error: "", needsPassword: false, passwordReason: "invite" });
+          return;
+        }
         const token = getPendingInvitation();
         let passwordReason = window.sessionStorage.getItem(passwordSetupKey) || "";
         const acceptOnce = (invitationToken) => {
@@ -85,11 +91,34 @@ function AccessRouter({ session, onSignOut }) {
     return () => { mounted = false; };
   }, [passwordSetupKey, session.user.id]);
 
+  const destination = resolvePostAuthRoute({ session, access: result.access });
+  useEffect(() => {
+    if (!result.loading && destination && currentPath !== destination) navigate(destination);
+  }, [currentPath, destination, navigate, result.loading]);
+
+  const checkApprovalStatus = async () => {
+    if (statusCheck.pending) return;
+    setStatusCheck({ pending: true, message: "" });
+    try {
+      const access = await fetchMyAccess();
+      setResult((current) => ({ ...current, access, error: "" }));
+      const nextRoute = resolvePostAuthRoute({ session, access });
+      if (nextRoute === AUTH_ROUTES.app) {
+        navigate(nextRoute);
+        setStatusCheck({ pending: false, message: "" });
+      } else {
+        setStatusCheck({ pending: false, message: "Your account is still waiting for approval." });
+      }
+    } catch {
+      setStatusCheck({ pending: false, message: "We couldn't check your approval status. Please try again." });
+    }
+  };
+
   if (result.loading) return <div className="auth-loading" aria-label="Loading account access"><span /></div>;
   if (result.needsPassword) return <PasswordSetup reason={result.passwordReason} onSignOut={onSignOut} onComplete={async (password) => { await completePasswordSetup(password); const access = await fetchMyAccess(); window.sessionStorage.removeItem(passwordSetupKey); setResult((current) => ({ ...current, access, needsPassword: false })); }} />;
-  if (!result.access) return <AccountState state="no_access" error={result.error} onSignOut={onSignOut} />;
+  if (!result.access) return <AccountState state="no_access" error={result.error ? "We couldn't check your account access. Please try again." : ""} onSignOut={onSignOut} onCheckStatus={checkApprovalStatus} checking={statusCheck.pending} statusMessage={statusCheck.message} checkLabel="Try Again" />;
   if (result.access.state === "platform_admin") return <Suspense fallback={<div className="auth-loading" aria-label="Loading platform administration"><span /></div>}><PlatformAdmin onSignOut={onSignOut} /></Suspense>;
-  if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} />;
+  if (!["approved_owner", "active_employee"].includes(result.access.state)) return <AccountState state={result.access.state} onSignOut={onSignOut} onCheckStatus={result.access.state === "pending_approval" ? checkApprovalStatus : null} checking={statusCheck.pending} statusMessage={statusCheck.message} />;
   return <AuthenticatedApp access={result.access} />;
 }
 

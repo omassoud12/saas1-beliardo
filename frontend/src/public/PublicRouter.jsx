@@ -14,7 +14,7 @@ function currentPath() {
 function hasAuthCallback() {
   const query = new URLSearchParams(window.location.search);
   const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
-  return Boolean(query.get("code") || query.get("token_hash") || hash.get("access_token") || hash.get("refresh_token"));
+  return Boolean(query.get("code") || query.get("token_hash") || query.get("error") || hash.get("access_token") || hash.get("refresh_token") || hash.get("error"));
 }
 
 export function PublicRouter({ renderAuth }) {
@@ -35,9 +35,15 @@ export function PublicRouter({ renderAuth }) {
     setPath(nextPath);
   };
 
-  if (pendingInvitation || pendingPasswordReset || authCallback || [PUBLIC_ROUTES.login, PUBLIC_ROUTES.register, "/app"].includes(path)) {
+  const navigate = (nextPath, { replace = true } = {}) => {
+    const normalized = nextPath.toLowerCase();
+    window.history[replace ? "replaceState" : "pushState"]({}, "", normalized);
+    setPath(normalized);
+  };
+
+  if (pendingInvitation || pendingPasswordReset || authCallback || [PUBLIC_ROUTES.login, PUBLIC_ROUTES.register, PUBLIC_ROUTES.checkEmail, PUBLIC_ROUTES.pendingApproval, PUBLIC_ROUTES.app].includes(path)) {
     const mode = pendingInvitation || path === PUBLIC_ROUTES.register ? "signup" : "signin";
-    return renderAuth({ mode, onModeChange: setAuthMode });
+    return renderAuth({ mode, path, authCallback, navigate, onModeChange: setAuthMode });
   }
   if (path === PUBLIC_ROUTES.home) return <LandingPage />;
   if (path === PUBLIC_ROUTES.contact) return <ContactPage />;
@@ -45,6 +51,6 @@ export function PublicRouter({ renderAuth }) {
 }
 
 function PublicNotFound() {
-  usePublicMetadata({ title: `Page Not Found | Lounge Hell`, description: "The requested Lounge Hell page could not be found." });
+  usePublicMetadata({ title: `Page Not Found | Lounge Hall`, description: "The requested Lounge Hall page could not be found." });
   return <div className="public-site"><PublicNavbar currentPath="" /><main className="public-not-found"><p className="public-kicker">404 / Not found</p><h1>This page is off the floor.</h1><p>The address may have changed, or the page does not exist.</p><a className="public-button public-button--primary" href={PUBLIC_ROUTES.home}>Return home</a></main><PublicFooter /></div>;
 }
