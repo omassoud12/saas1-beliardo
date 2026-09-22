@@ -7,7 +7,7 @@ export function KpiGrid({ items, eyebrow, title }) {
           <article className={`business-kpi ${item.emphasis ? "business-kpi--primary" : ""}`} key={item.key ?? item.label}>
             <div className="business-kpi__topline">
               <span className="business-kpi__icon" aria-hidden="true">{item.icon}</span>
-              <span>{item.label}</span>
+              <KpiLabel value={item.label} />
             </div>
             <strong>{item.value}</strong>
             {item.comparison && <p className={`business-kpi__comparison business-kpi__comparison--${item.comparison.tone}`}>{item.comparison.label}</p>}
@@ -18,4 +18,10 @@ export function KpiGrid({ items, eyebrow, title }) {
       {items.length > 2 && <span className="business-kpi-scroll-hint" aria-hidden="true">Swipe to view all metrics →</span>}
     </section>
   );
+}
+
+function KpiLabel({ value }) {
+  const [primary, ...secondaryParts] = String(value).split(/\s*(?:·|Â·)\s*/);
+  const secondary = secondaryParts.join(" · ");
+  return <span className="business-kpi__label"><span>{primary}</span>{secondary && <small lang="ar" dir="rtl">{secondary}</small>}</span>;
 }
