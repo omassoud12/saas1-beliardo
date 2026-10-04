@@ -4,6 +4,7 @@ export const BUSINESS_COPY = Object.freeze({
     ["activity", "Activity · الأنشطة"],
     ["expenses", "Expenses · المصاريف"],
     ["targets", "Targets · الأهداف"],
+    ["historical", "Historical Data"],
   ],
   periods: {
     daily: "Daily · يومي",

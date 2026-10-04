@@ -36,12 +36,18 @@ function summarize(rows) {
     if (map[row.activity_type]) addRow(map[row.activity_type], row);
   }
   const activities = activityTypes.map((type) => finishMetric(map[type]));
-  const total = activities.reduce((sum, activity) => ({
-    sessions: sum.sessions + activity.sessions,
-    totalSeconds: sum.totalSeconds + activity.totalSeconds,
-    revenue: sum.revenue + activity.revenue,
+  const total = rows.reduce((sum, row) => ({
+    sessions: sum.sessions + (Number(row.session_count) || 0),
+    totalSeconds: sum.totalSeconds + (Number(row.total_seconds) || 0),
+    revenue: sum.revenue + (Number(row.revenue) || 0),
   }), { sessions: 0, totalSeconds: 0, revenue: 0 });
-  return { activities, total: finishMetric({ type: "all", label: "All Activities", ...total }) };
+  const sessionDataComplete = !rows.some((row) => row.is_historical && row.row_kind === "revenue" && row.operations_known !== true);
+  const durationDataComplete = !rows.some((row) => row.is_historical && row.row_kind === "revenue" && row.duration_known !== true);
+  return {
+    activities,
+    total: finishMetric({ type: "all", label: "All Activities", ...total }),
+    dataQuality: { sessionDataComplete, durationDataComplete, includesHistoricalData: rows.some((row) => row.is_historical) },
+  };
 }
 
 function groupRows(rows) {
@@ -55,9 +61,33 @@ function groupRows(rows) {
   return groups;
 }
 
-function buildBuckets(keys, rows) {
+function coverageIncludesKey(coverage, key) {
+  if (key.length === 10) return coverage.start <= key && coverage.end >= key;
+  const monthStart = `${key}-01`;
+  const [year, month] = key.split("-").map(Number);
+  const monthEnd = new Date(Date.UTC(year, month, 1)).toISOString().slice(0, 10);
+  return coverage.start < monthEnd && coverage.end >= monthStart;
+}
+
+function buildBuckets(keys, rows, coverage = []) {
   const groups = groupRows(rows);
-  return keys.map((key) => ({ key, ...summarize(groups.get(key) ?? []) }));
+  return keys.map((key) => {
+    const bucketRows = groups.get(key) ?? [];
+    const summary = summarize(bucketRows);
+    const historicalCoverageUnknown = bucketRows.length === 0
+      && coverage.some((item) => item.mode === "partial" && coverageIncludesKey(item, key));
+    return { key, ...summary, dataQuality: { ...summary.dataQuality, historicalCoverageUnknown } };
+  });
+}
+
+function historicalCoverage(repository, businessId, range) {
+  return repository.listHistoricalCoverage ? repository.listHistoricalCoverage(businessId, range) : Promise.resolve([]);
+}
+
+function shiftDateKey(date, amount) {
+  const value = new Date(`${date}T00:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + amount);
+  return value.toISOString().slice(0, 10);
 }
 
 function mapSession(row) {
@@ -97,13 +127,17 @@ export function createBusinessService({ repository = businessRepository, clock =
     async daily({ businessId, timezone, date, page = 1, pageSize = 50, aggregateRange = null }) {
       const range = getDateRange(date, timezone);
       const dataRange = aggregateRange ?? range;
-      const [rows, sessionRows, concurrencyRows] = await Promise.all([
+      const [rows, dailyRows, sessionRows, concurrencyRows, coverage] = await Promise.all([
         repository.aggregate(businessId, dataRange, "hour", timezone),
+        repository.aggregate(businessId, dataRange, "day", timezone),
         repository.findDailySessions(businessId, range, { page, pageSize }),
         repository.findConcurrencySessions(businessId, range),
+        historicalCoverage(repository, businessId, { ...range, startDate: date, endDateExclusive: shiftDateKey(date, 1) }),
       ]);
       const traffic = buildBuckets(getHourlyBucketKeys(range), rows);
-      const completed = summarize(rows);
+      const completed = summarize(dailyRows);
+      const historicalCoverageUnknown = dailyRows.length === 0
+        && coverage.some((item) => item.mode === "partial" && coverageIncludesKey(item, date));
       const sessionResult = Array.isArray(sessionRows)
         ? { items: sessionRows, total: sessionRows.length, page: 1, pageSize: sessionRows.length || pageSize, hasMore: false }
         : sessionRows;
@@ -117,10 +151,10 @@ export function createBusinessService({ repository = businessRepository, clock =
       return {
         period: { kind: "day", date, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
-          totalSessions: completed.total.sessions + openSessionCount,
-          completedSessions: completed.total.sessions,
-          totalHours: completed.total.hours,
-          totalSeconds: completed.total.totalSeconds,
+          totalSessions: completed.dataQuality.sessionDataComplete ? completed.total.sessions + openSessionCount : null,
+          completedSessions: completed.dataQuality.sessionDataComplete ? completed.total.sessions : null,
+          totalHours: completed.dataQuality.durationDataComplete ? completed.total.hours : null,
+          totalSeconds: completed.dataQuality.durationDataComplete ? completed.total.totalSeconds : null,
           revenue: completed.total.revenue,
           peakActivity: peak.sessions,
           peakHour: peak.key,
@@ -130,48 +164,55 @@ export function createBusinessService({ repository = businessRepository, clock =
         sessions,
         sessionPagination: { total: sessionResult.total, page: sessionResult.page, pageSize: sessionResult.pageSize, hasMore: sessionResult.hasMore },
         concurrencySessions: concurrencyRows.map(mapSession),
+        dataQuality: { ...completed.dataQuality, historicalCoverageUnknown, historicalCoveragePartial: coverage.some((item) => item.mode === "partial") },
       };
     },
 
     async monthly({ businessId, timezone, year, month, aggregateRange = null }) {
       const range = getMonthRange(year, month, timezone);
-      const rows = await repository.aggregate(businessId, aggregateRange ?? range, "day", timezone);
-      const days = buildBuckets(dayKeys(year, month), rows);
+      const [rows, coverage] = await Promise.all([
+        repository.aggregate(businessId, aggregateRange ?? range, "day", timezone),
+        historicalCoverage(repository, businessId, { ...range, startDate: `${year}-${String(month).padStart(2, "0")}-01`, endDateExclusive: month === 12 ? `${Number(year) + 1}-01-01` : `${year}-${String(Number(month) + 1).padStart(2, "0")}-01` }),
+      ]);
+      const days = buildBuckets(dayKeys(year, month), rows, coverage);
       const summary = summarize(rows);
       return {
         period: { kind: "month", year, month, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
-          trackedDays: days.filter((day) => day.total.sessions > 0).length,
-          sessionCount: summary.total.sessions,
-          totalHours: summary.total.hours,
-          totalSeconds: summary.total.totalSeconds,
+          trackedDays: days.filter((day) => day.total.sessions > 0 || day.total.revenue > 0).length,
+          sessionCount: summary.dataQuality.sessionDataComplete ? summary.total.sessions : null,
+          totalHours: summary.dataQuality.durationDataComplete ? summary.total.hours : null,
+          totalSeconds: summary.dataQuality.durationDataComplete ? summary.total.totalSeconds : null,
           revenue: summary.total.revenue,
         },
         activities: summary.activities,
         days,
+        dataQuality: { ...summary.dataQuality, historicalCoveragePartial: coverage.some((item) => item.mode === "partial") },
       };
     },
 
     async yearly({ businessId, timezone, year, aggregateRange = null }) {
       const range = getYearRange(year, timezone);
       const dataRange = aggregateRange ?? range;
-      const [monthRows, dayRows] = await Promise.all([
+      const [monthRows, dayRows, coverage] = await Promise.all([
         repository.aggregate(businessId, dataRange, "month", timezone),
         repository.aggregate(businessId, dataRange, "day", timezone),
+        historicalCoverage(repository, businessId, { ...range, startDate: `${year}-01-01`, endDateExclusive: `${Number(year) + 1}-01-01` }),
       ]);
-      const months = buildBuckets(monthKeys(year), monthRows);
+      const months = buildBuckets(monthKeys(year), monthRows, coverage);
       const summary = summarize(monthRows);
       return {
         period: { kind: "year", year, businessDate: getBusinessDateKey(clock(), timezone), timezone, currency: defaultCurrency, ...range },
         metrics: {
-          trackedDays: new Set(dayRows.filter((row) => Number(row.session_count) > 0).map((row) => row.bucket_key)).size,
-          sessionCount: summary.total.sessions,
-          totalHours: summary.total.hours,
-          totalSeconds: summary.total.totalSeconds,
+          trackedDays: new Set(dayRows.filter((row) => Number(row.session_count) > 0 || Number(row.revenue) > 0).map((row) => row.bucket_key)).size,
+          sessionCount: summary.dataQuality.sessionDataComplete ? summary.total.sessions : null,
+          totalHours: summary.dataQuality.durationDataComplete ? summary.total.hours : null,
+          totalSeconds: summary.dataQuality.durationDataComplete ? summary.total.totalSeconds : null,
           revenue: summary.total.revenue,
         },
         activities: summary.activities,
         months,
+        dataQuality: { ...summary.dataQuality, historicalCoveragePartial: coverage.some((item) => item.mode === "partial") },
       };
     },
   };

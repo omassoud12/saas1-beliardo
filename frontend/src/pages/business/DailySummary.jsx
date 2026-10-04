@@ -43,8 +43,8 @@ function DailyContent({ data, date, analysisQuery, onSessionPageChange }) {
   return (
     <>
       <KpiGrid eyebrow="Operations · التشغيل" title="Today's activity · نشاط اليوم" items={[
-        { label: "Total Sessions · إجمالي الجلسات", value: metrics.totalSessions, description: "Completed and currently open · المكتملة والمفتوحة حالياً", icon: "#" },
-        { label: "Total Hours · إجمالي الساعات", value: formatHours(metrics.totalHours), description: "Completed usage · مدة الاستخدام المكتملة", icon: "h" },
+        { label: "Total Sessions · إجمالي الجلسات", value: metrics.totalSessions ?? "Unknown", description: metrics.totalSessions === null ? "Not supplied by the historical import" : "Completed and currently open · المكتملة والمفتوحة حالياً", icon: "#" },
+        { label: "Total Hours · إجمالي الساعات", value: metrics.totalHours === null ? "Unknown" : formatHours(metrics.totalHours), description: metrics.totalHours === null ? "Not supplied by the historical import" : "Completed usage · مدة الاستخدام المكتملة", icon: "h" },
         { label: "Peak Activity · وقت الذروة", value: `${metrics.peakActivity} sessions`, description: metrics.peakActivity ? `Busiest completion hour: ${peakLabel}` : "No completed traffic yet · لا توجد حركة مكتملة", icon: "^" },
       ]} />
       <ActivityLineChart sessions={concurrencySessions} period={data.period} date={date} metrics={metrics} />

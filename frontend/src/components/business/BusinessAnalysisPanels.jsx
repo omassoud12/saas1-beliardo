@@ -54,7 +54,7 @@ function TargetActionPlan({ data }) {
       <div><span>Business days remaining<br /><b lang="ar" dir="rtl">أيام العمل المتبقية</b></span><strong>{plan.daysRemaining}</strong></div>
     </div>
     {plan.averageSessionValue && !completed && !plan.periodClosed && <p className="target-action__note">Estimate uses the current {formatCurrency(plan.averageSessionValue)} average per completed session. · <span lang="ar" dir="rtl">التقدير مبني على متوسط {formatCurrency(plan.averageSessionValue)} لكل جلسة مكتملة.</span></p>}
-    {plan.expectedNetProfit <= 0 && <p className="target-action__warning">The sales target no longer covers current expected costs. Update the target or review expenses. · <span lang="ar" dir="rtl">هدف المبيعات لم يعد يغطي المصاريف المتوقعة الحالية. عدّل الهدف أو راجع المصاريف.</span></p>}
+    {plan.expectedNetProfit !== null && plan.expectedNetProfit <= 0 && <p className="target-action__warning">The sales target no longer covers current expected costs. Update the target or review expenses. · <span lang="ar" dir="rtl">هدف المبيعات لم يعد يغطي المصاريف المتوقعة الحالية. عدّل الهدف أو راجع المصاريف.</span></p>}
     {plan.costBasisChanged && <p className="target-action__warning">Costs changed after this target was saved. Expected profit was recalculated using current expenses. · <span lang="ar" dir="rtl">تغيّرت المصاريف بعد حفظ الهدف، لذلك أُعيد احتساب الربح المتوقع حسب المصاريف الحالية.</span></p>}
   </section>;
 }
@@ -111,27 +111,30 @@ export function BusinessOverview({ query }) {
   if (query.error) return <section className="business-overview"><AnalyticsError onRetry={query.retry} /></section>;
   if (!query.data) return null;
   const { financial, period, statuses, decisionSupport } = query.data;
-  const revenueComparison = comparisonDetails(query.data.comparisons?.previousPeriod?.totalRevenue, period);
+  const revenueUnknown = query.data.dataQuality?.revenueCoverageUnknown === true;
+  const revenueComparison = revenueUnknown ? null : comparisonDetails(query.data.comparisons?.previousPeriod?.totalRevenue, period);
   const { revenue, costs, netProfit, profitBarWidth, costBarWidth, isLoss } = profitCostPresentation(financial);
   const target = targetProgressPresentation(decisionSupport, revenue);
-  const resultTone = statuses.profitability === "profitable" ? "green" : statuses.profitability === "loss" ? "red" : "yellow";
+  const resultTone = statuses.profitability === "profitable" ? "green" : statuses.profitability === "loss" ? "red" : statuses.profitability === "unknown" ? "gray" : "yellow";
   return <section className={`business-overview business-overview--${resultTone}`} aria-labelledby="business-overview-title">
     <div className="business-overview__topline">
       <div><p className="eyebrow">Business snapshot · نظرة سريعة</p><h2 id="business-overview-title">Business Snapshot</h2></div>
       <p className="business-overview__period">{compactPeriodLabel(period)}</p>
     </div>
     {period.isPartial && <p className="business-overview__accounting-note">Revenue through current time · Scheduled period expenses included</p>}
+    {query.data.dataQuality?.includesHistoricalData && <p className="business-overview__history-note">Includes historical data{query.data.dataQuality.historicalCoveragePartial ? " · Partial historical coverage" : ""}</p>}
     <div className="business-snapshot__grid">
       <article className={`business-snapshot__unified ${isLoss ? "business-snapshot__unified--loss" : ""}`}>
         <section className="business-snapshot__revenue" aria-label="Revenue">
           <span>{BUSINESS_COPY.metrics.revenue}</span>
-          <strong>{formatCurrency(revenue)}</strong>
+          <strong>{revenueUnknown ? "Unknown" : formatCurrency(revenue)}</strong>
+          {revenueUnknown && <small>No historical record for this date.</small>}
           {revenueComparison && <small className={`business-snapshot__comparison business-snapshot__comparison--${revenueComparison.tone}`}>{revenueComparison.label}</small>}
         </section>
 
         <section className={`business-snapshot__target ${target.state === "reached" || target.state === "exceeded" ? "business-snapshot__target--met" : ""}`} aria-label="Revenue target">
           <div className="business-snapshot__card-heading"><span>Target progress</span>{target.hasTarget && <strong>{percentValue(target.progress)}</strong>}</div>
-          {target.hasTarget ? <>
+          {revenueUnknown ? <div className="business-snapshot__empty"><strong>Progress unavailable</strong><small>No historical revenue record exists for this date.</small></div> : target.hasTarget ? <>
             <p><strong>{formatCurrency(revenue)}</strong><span> / {formatCurrency(target.target)}</span></p>
             <div className="business-snapshot__progress" role="progressbar" aria-label="Revenue target progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow={Math.round(target.barWidth)} aria-valuetext={`${target.progress}%`}><i style={{ width: `${target.barWidth}%` }} /></div>
             <small>{target.state === "exceeded" ? "Target exceeded" : target.state === "reached" ? "Target reached" : `${formatCurrency(target.remaining)} remaining`}</small>
@@ -140,8 +143,9 @@ export function BusinessOverview({ query }) {
 
         <section className="business-snapshot__profit-costs" aria-label="Net profit and period expenses">
           <div className="business-snapshot__card-heading"><span>Profit vs Costs</span>{isLoss && <strong>Loss</strong>}</div>
-          <div className="business-snapshot__bar-row business-snapshot__bar-row--profit"><p><span>{BUSINESS_COPY.metrics.netProfit}</span><strong className={isLoss ? "business-snapshot__loss-value" : ""}>{formatCurrency(netProfit)}</strong></p><div><i style={{ width: `${profitBarWidth}%` }} /></div></div>
-          <div className="business-snapshot__bar-row business-snapshot__bar-row--costs"><p><span>{BUSINESS_COPY.metrics.periodExpenses}</span><strong>{formatCurrency(costs)}</strong></p><div><i style={{ width: `${costBarWidth}%` }} /></div></div>
+          <div className="business-snapshot__bar-row business-snapshot__bar-row--profit"><p><span>{BUSINESS_COPY.metrics.netProfit}</span><strong className={isLoss ? "business-snapshot__loss-value" : ""}>{netProfit === null ? "Unavailable" : formatCurrency(netProfit)}</strong></p><div><i style={{ width: `${profitBarWidth}%` }} /></div></div>
+          <div className="business-snapshot__bar-row business-snapshot__bar-row--costs"><p><span>{BUSINESS_COPY.metrics.periodExpenses}</span><strong>{query.data.dataQuality?.expensesComplete === false ? `${formatCurrency(costs)} known` : formatCurrency(costs)}</strong></p><div><i style={{ width: `${costBarWidth}%` }} /></div></div>
+          {netProfit === null && <small className="business-snapshot__zero">Profit is unavailable because imported expense data is missing.</small>}
           {revenue === 0 && costs === 0 && <small className="business-snapshot__zero">No revenue or expenses in this period.</small>}
           {revenue === 0 && costs > 0 && <small className="business-snapshot__zero">Expenses were recorded with no revenue.</small>}
         </section>

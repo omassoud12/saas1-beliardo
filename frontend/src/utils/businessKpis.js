@@ -61,7 +61,7 @@ export function compactPeriodLabel(period) {
 export function profitCostPresentation(financial = {}) {
   const revenue = Number(financial.totalRevenue) || 0;
   const costs = Number(financial.totalCosts) || 0;
-  const netProfit = Number(financial.netProfit) || 0;
+  const netProfit = financial.netProfit === null || financial.netProfit === undefined ? null : Number(financial.netProfit) || 0;
   const hasMargin = financial.profitMargin !== null && financial.profitMargin !== undefined;
   const margin = Number(financial.profitMargin);
   const profitPercent = revenue > 0 && hasMargin && Number.isFinite(margin) ? margin : null;
@@ -74,7 +74,7 @@ export function profitCostPresentation(financial = {}) {
     costPercent,
     profitBarWidth: profitPercent === null ? 0 : Math.min(100, Math.max(0, profitPercent)),
     costBarWidth: costPercent === null ? (costs > 0 ? 100 : 0) : Math.min(100, Math.max(0, costPercent)),
-    isLoss: netProfit < 0,
+    isLoss: netProfit !== null && netProfit < 0,
   };
 }
 
@@ -123,7 +123,7 @@ export function buildSecondaryKpis(data) {
     {
       key: "completed-sessions",
       label: BUSINESS_COPY.metrics.completedSessions,
-      value: data.operations.completedSessions,
+      value: valueOrDash(data.operations.completedSessions, (value) => value),
       comparison: comparisonDetails(data.comparisons?.previousPeriod?.completedSessions, data.period),
     },
     ...buildOperationalKpis(data),

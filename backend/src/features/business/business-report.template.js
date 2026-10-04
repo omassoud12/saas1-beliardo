@@ -370,14 +370,16 @@ function financialValues(report) {
 
 function businessOverviewSection(report, locale, language) {
   const financial = financialValues(report);
+  const profitKnown = financial.netProfit !== null && financial.netProfit !== undefined;
   const status = report.analysis?.statuses?.profitability
-    ?? (financial.netProfit > 0 ? "profitable" : financial.netProfit < 0 ? "loss" : "break_even");
-  const state = status === "profitable" ? ["Profit", "ربح"] : status === "loss" ? ["Loss", "خسارة"] : ["Break-even", "تعادل"];
+    ?? (!profitKnown ? "unknown" : financial.netProfit > 0 ? "profitable" : financial.netProfit < 0 ? "loss" : "break_even");
+  const state = status === "profitable" ? ["Profit", "ربح"] : status === "loss" ? ["Loss", "خسارة"] : status === "unknown" ? ["Unavailable", "غير متاح"] : ["Break-even", "تعادل"];
   const tone = status === "profitable" ? "green" : status === "loss" ? "red" : "yellow";
   const scale = Math.max(financial.totalRevenue, financial.totalCosts, 1);
   const salesWidth = Math.max(0, financial.totalRevenue / scale * 100);
   const costsWidth = Math.max(0, financial.totalCosts / scale * 100);
-  const resultSign = financial.netProfit > 0 ? "+" : "";
+  const resultSign = profitKnown && financial.netProfit > 0 ? "+" : "";
+  const resultValue = profitKnown ? `${resultSign}${currency(financial.netProfit, report.summary.period.currency, locale)}` : dual(language, "Unavailable", "غير متاح");
   const plan = report.analysis?.decisionSupport;
   const targetProgress = plan?.hasTarget ? Math.max(0, Number(plan.revenueProgress || 0)) : null;
   const range = report.analysis?.period;
@@ -386,7 +388,7 @@ function businessOverviewSection(report, locale, language) {
     : periodLabel(report, labels[language], locale);
   return `<section class="overview overview--${tone}">
     <div class="panel-topline"><p class="eyebrow">${escapeHtml(dual(language, "Business snapshot", "نظرة سريعة"))}</p><p class="period-scope">◷ ${escapeHtml(scope)}</p></div>
-    <div class="overview-visual"><div class="overview-result"><span class="result-status"><i></i>${escapeHtml(dual(language, state[0], state[1]))}</span><strong>${escapeHtml(`${resultSign}${currency(financial.netProfit, report.summary.period.currency, locale)}`)}</strong><small>${escapeHtml(dual(language, "Net result", "صافي النتيجة"))}</small></div>
+    <div class="overview-visual"><div class="overview-result"><span class="result-status"><i></i>${escapeHtml(dual(language, state[0], state[1]))}</span><strong>${escapeHtml(resultValue)}</strong><small>${escapeHtml(dual(language, "Net result", "صافي النتيجة"))}</small></div>
       <div class="overview-bars">
         <div class="bar-row bar-row--sales"><span>${escapeHtml(dual(language, "Sales", "المبيعات"))}</span><strong>${escapeHtml(currency(financial.totalRevenue, report.summary.period.currency, locale))}</strong><div><i style="width:${salesWidth.toFixed(2)}%"></i></div></div>
         <div class="bar-row bar-row--costs"><span>${escapeHtml(dual(language, "Costs", "المصاريف"))}</span><strong>${escapeHtml(currency(financial.totalCosts, report.summary.period.currency, locale))}</strong><div><i style="width:${costsWidth.toFixed(2)}%"></i></div></div>
@@ -457,15 +459,16 @@ function monthlyGrowthSection(report, locale, language) {
 
 function operationKpis(report, locale, language) {
   const metrics = report.summary.metrics;
+  const unknown = dual(language, "Unknown", "غير معروف");
   const items = report.reportType === "daily" ? [
-    ["#", dual(language, "Total Sessions", "إجمالي الجلسات"), metrics.totalSessions ?? metrics.completedSessions ?? 0, dual(language, "Completed and currently open", "المكتملة والمفتوحة حالياً")],
-    ["✓", dual(language, "Completed", "المكتملة"), metrics.completedSessions ?? 0, dual(language, "Sessions with a recorded end time", "جلسات لها وقت انتهاء")],
-    ["h", dual(language, "Total Hours", "إجمالي الساعات"), duration(metrics.totalSeconds), dual(language, "Completed usage", "مدة الاستخدام المكتملة")],
+    ["#", dual(language, "Total Sessions", "إجمالي الجلسات"), metrics.totalSessions ?? metrics.completedSessions ?? unknown, dual(language, "Completed and currently open", "المكتملة والمفتوحة حالياً")],
+    ["✓", dual(language, "Completed", "المكتملة"), metrics.completedSessions ?? unknown, dual(language, "Sessions with a recorded end time", "جلسات لها وقت انتهاء")],
+    ["h", dual(language, "Total Hours", "إجمالي الساعات"), metrics.totalSeconds === null ? unknown : duration(metrics.totalSeconds), dual(language, "Completed usage", "مدة الاستخدام المكتملة")],
     ["^", dual(language, "Peak Activity", "وقت الذروة"), `${metrics.peakActivity ?? 0} ${dual(language, "sessions", "جلسات")}`, metrics.peakHour ? `${dual(language, "Busiest completion hour", "ساعة الذروة")}: ${hourLabel(metrics.peakHour, report.summary.period.timezone || report.timezone, locale)}` : dual(language, "No completed traffic yet", "لا توجد حركة مكتملة")],
   ] : [
     ["#", dual(language, "Tracked Days", "الأيام المسجلة"), metrics.trackedDays ?? 0, dual(language, "Days with completed activity", "أيام فيها نشاط مكتمل")],
-    ["✓", dual(language, "Sessions", "الجلسات"), metrics.sessionCount ?? 0, dual(language, report.reportType === "monthly" ? "Completed this month" : "Completed this year", report.reportType === "monthly" ? "المكتملة هذا الشهر" : "المكتملة هذه السنة")],
-    ["h", dual(language, report.reportType === "monthly" ? "Monthly Hours" : "Yearly Hours", report.reportType === "monthly" ? "ساعات الشهر" : "ساعات السنة"), duration(metrics.totalSeconds), dual(language, "Combined completed usage", "إجمالي الاستخدام المكتمل")],
+    ["✓", dual(language, "Sessions", "الجلسات"), metrics.sessionCount ?? unknown, dual(language, report.reportType === "monthly" ? "Completed this month" : "Completed this year", report.reportType === "monthly" ? "المكتملة هذا الشهر" : "المكتملة هذه السنة")],
+    ["h", dual(language, report.reportType === "monthly" ? "Monthly Hours" : "Yearly Hours", report.reportType === "monthly" ? "ساعات الشهر" : "ساعات السنة"), metrics.totalSeconds === null ? unknown : duration(metrics.totalSeconds), dual(language, "Combined completed usage", "إجمالي الاستخدام المكتمل")],
   ];
   const title = report.reportType === "daily" ? dual(language, "Today's activity", "نشاط اليوم")
     : report.reportType === "monthly" ? dual(language, "Month activity", "نشاط الشهر") : dual(language, "Year activity", "نشاط السنة");
@@ -477,17 +480,20 @@ function executiveSummarySection(report, locale, language) {
   const financial = financialValues(report);
   const currencyCode = report.summary.period.currency;
   const revenue = Number(financial.totalRevenue ?? metrics.revenue ?? 0);
-  const sessions = Number(metrics.completedSessions ?? metrics.sessionCount ?? 0);
-  const totalSeconds = Number(metrics.totalSeconds ?? 0);
-  const netProfit = Number(financial.netProfit ?? revenue);
+  const sessionsKnown = (metrics.completedSessions ?? metrics.sessionCount) !== null && (metrics.completedSessions ?? metrics.sessionCount) !== undefined;
+  const durationKnown = metrics.totalSeconds !== null && metrics.totalSeconds !== undefined;
+  const sessions = sessionsKnown ? Number(metrics.completedSessions ?? metrics.sessionCount) : null;
+  const totalSeconds = durationKnown ? Number(metrics.totalSeconds) : null;
+  const profitKnown = financial.netProfit !== null && financial.netProfit !== undefined;
+  const netProfit = profitKnown ? Number(financial.netProfit) : null;
   const margin = financial.profitMargin;
   const status = report.analysis?.statuses?.profitability
-    ?? (netProfit > 0 ? "profitable" : netProfit < 0 ? "loss" : "break_even");
+    ?? (!profitKnown ? "unknown" : netProfit > 0 ? "profitable" : netProfit < 0 ? "loss" : "break_even");
   const statusCopy = status === "profitable"
     ? dual(language, "Profitable period", "فترة رابحة")
     : status === "loss"
       ? dual(language, "Loss-making period", "فترة خاسرة")
-      : dual(language, "Break-even period", "فترة تعادل");
+      : status === "unknown" ? dual(language, "Profit unavailable", "الربح غير متاح") : dual(language, "Break-even period", "فترة تعادل");
   const tone = status === "profitable" ? "positive" : status === "loss" ? "negative" : "neutral";
   const target = report.analysis?.decisionSupport;
   const context = [
@@ -497,9 +503,9 @@ function executiveSummarySection(report, locale, language) {
   ];
   const keyFigures = [
     [dual(language, "Revenue", "المبيعات"), currency(revenue, currencyCode, locale)],
-    [dual(language, "Net profit", "صافي الربح"), currency(netProfit, currencyCode, locale)],
-    [dual(language, "Completed sessions", "الجلسات المكتملة"), String(sessions)],
-    [dual(language, "Playing time", "وقت اللعب"), duration(totalSeconds)],
+    [dual(language, "Net profit", "صافي الربح"), profitKnown ? currency(netProfit, currencyCode, locale) : dual(language, "Unavailable", "غير متاح")],
+    [dual(language, "Completed sessions", "الجلسات المكتملة"), sessionsKnown ? String(sessions) : dual(language, "Unknown", "غير معروف")],
+    [dual(language, "Playing time", "وقت اللعب"), durationKnown ? duration(totalSeconds) : dual(language, "Unknown", "غير معروف")],
   ];
 
   return `<section class="executive-summary">

@@ -115,6 +115,40 @@ async function pagedExpenseRange(businessId, startDate, endDateExclusive, recurr
 }
 
 export const businessAnalysisRepository = {
+  async listHistoricalCoveragesForRange(businessId, { startDate, endDateExclusive }) {
+    const { data, error } = await getSupabaseDataClient()
+      .from("business_historical_imports")
+      .select("coverage_start, coverage_end, coverage_mode")
+      .eq("business_id", businessId)
+      .eq("status", "active")
+      .lt("coverage_start", endDateExclusive)
+      .gte("coverage_end", startDate);
+    if (error?.code === "42P01" || error?.code === "PGRST205") return [];
+    throwDatabaseError(error);
+    return (data ?? []).map((row) => ({ start: row.coverage_start, end: row.coverage_end, mode: row.coverage_mode }));
+  },
+
+  async listHistoricalDailyForRange(businessId, { startDate, endDateExclusive }) {
+    const { data, error } = await getSupabaseDataClient()
+      .from("business_historical_daily")
+      .select("business_date, revenue_usd, expenses_usd, completed_sessions, total_duration_seconds, import:business_historical_imports!inner(coverage_mode)")
+      .eq("business_id", businessId)
+      .eq("status", "active")
+      .gte("business_date", startDate)
+      .lt("business_date", endDateExclusive)
+      .order("business_date", { ascending: true });
+    if (error?.code === "42P01" || error?.code === "PGRST205") return [];
+    throwDatabaseError(error);
+    return (data ?? []).map((row) => ({
+      businessDate: row.business_date,
+      revenueUsd: Number(row.revenue_usd),
+      expensesUsd: row.expenses_usd === null ? null : Number(row.expenses_usd),
+      completedSessions: row.completed_sessions === null ? null : Number(row.completed_sessions),
+      totalDurationSeconds: row.total_duration_seconds === null ? null : Number(row.total_duration_seconds),
+      coverageMode: (Array.isArray(row.import) ? row.import[0] : row.import)?.coverage_mode ?? "partial",
+    }));
+  },
+
   async listExpensePage(businessId, { page = 1, pageSize = 50, history = false } = {}) {
     const offset = (page - 1) * pageSize;
     let query = getSupabaseDataClient()

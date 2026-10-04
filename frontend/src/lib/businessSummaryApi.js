@@ -76,6 +76,27 @@ export async function deleteBusinessTarget(targetId) {
   await apiRequest(`/business/targets/${targetId}`, { method: "DELETE" });
 }
 
+export async function previewHistoricalImport(values) {
+  const payload = await apiRequest("/business/historical/preview", {
+    method: "POST",
+    body: JSON.stringify(values),
+  });
+  return payload.data.preview;
+}
+
+export async function confirmHistoricalImport(values) {
+  const payload = await apiRequest("/business/historical/imports", {
+    method: "POST",
+    body: JSON.stringify(values),
+  });
+  return payload.data.historicalImport;
+}
+
+export async function getHistoricalImports(page = 1, pageSize = 20, signal) {
+  const payload = await apiRequest(`/business/historical/imports?${query({ page, pageSize })}`, { signal });
+  return { items: payload.data.imports, pagination: payload.data.pagination };
+}
+
 function safeDownloadName(contentDisposition, fallbackFilename) {
   const match = /filename="?([^";]+)"?/i.exec(contentDisposition);
   const received = match?.[1]?.replace(/[^a-zA-Z0-9._-]/g, "");

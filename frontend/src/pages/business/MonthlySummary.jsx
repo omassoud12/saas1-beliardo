@@ -39,7 +39,7 @@ function MonthlyContent({ data, year, month, onSelectDay, analysisQuery }) {
     <>
       <KpiGrid eyebrow="Operations · التشغيل" title="Month activity · نشاط الشهر" items={[
         { label: "Tracked Days · الأيام المسجلة", value: metrics.trackedDays, description: "Days with completed activity · أيام فيها نشاط مكتمل", icon: "#" },
-        { label: "Monthly Hours · ساعات الشهر", value: formatHours(metrics.totalHours), description: "Combined completed usage · إجمالي الاستخدام المكتمل", icon: "h" },
+        { label: "Monthly Hours · ساعات الشهر", value: metrics.totalHours === null ? "Unknown" : formatHours(metrics.totalHours), description: metrics.totalHours === null ? "Not supplied by the historical import" : "Combined completed usage · إجمالي الاستخدام المكتمل", icon: "h" },
       ]} />
       <MonthlyCalendar year={year} month={month} days={days} onSelectDay={onSelectDay} />
       <MonthlyRevenueChart days={days} period={data.period} year={year} month={month} currency={data.period.currency} />

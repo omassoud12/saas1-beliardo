@@ -31,15 +31,15 @@ export function compareValues(currentValue, previousValue, threshold = STABILITY
   return { current, previous, absoluteDifference, percentageDifference, direction };
 }
 
-export function financialSummary(totalRevenue, totalCosts) {
+export function financialSummary(totalRevenue, totalCosts, costsKnown = true) {
   const revenue = roundMoney(totalRevenue);
   const costs = roundMoney(totalCosts);
-  const netProfit = roundMoney(revenue - costs);
+  const netProfit = costsKnown ? roundMoney(revenue - costs) : null;
   return {
     totalRevenue: revenue,
     totalCosts: costs,
     netProfit,
-    profitMargin: safeRatio(netProfit, revenue, 100),
+    profitMargin: netProfit === null ? null : safeRatio(netProfit, revenue, 100),
   };
 }
 
@@ -48,18 +48,23 @@ export function aggregateActivities(rows = []) {
   const order = ["playstation", "billiard", "pingpong"];
   const map = new Map(order.map((type) => [type, {
     type, label: labels[type], sessions: 0, totalSeconds: 0, hours: 0, revenue: 0,
+    operationsComplete: true, durationComplete: true,
   }]));
   for (const row of rows) {
     const type = row.activity_type;
     if (!type) continue;
     if (!map.has(type)) map.set(type, {
       type, label: String(type).replace(/[_-]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
-      sessions: 0, totalSeconds: 0, hours: 0, revenue: 0,
+      sessions: 0, totalSeconds: 0, hours: 0, revenue: 0, operationsComplete: true, durationComplete: true,
     });
     const activity = map.get(type);
     activity.sessions += Number(row.session_count) || 0;
     activity.totalSeconds += Number(row.total_seconds) || 0;
     activity.revenue += Number(row.revenue) || 0;
+    if (row.is_historical && Number(row.revenue) !== 0 && row.activity_operations_known !== true) {
+      activity.operationsComplete = false;
+      activity.durationComplete = false;
+    }
   }
   return [...map.values()].map((activity) => ({
     ...activity,
@@ -68,17 +73,17 @@ export function aggregateActivities(rows = []) {
   }));
 }
 
-export function activityPerformance(currentRows, previousRows) {
+export function activityPerformance(currentRows, previousRows, overallRevenue = null) {
   const current = aggregateActivities(currentRows);
   const previous = new Map(aggregateActivities(previousRows).map((item) => [item.type, item]));
-  const totalRevenue = current.reduce((sum, item) => sum + item.revenue, 0);
+  const totalRevenue = overallRevenue ?? current.reduce((sum, item) => sum + item.revenue, 0);
   return current.map((activity) => {
     const prior = previous.get(activity.type) ?? { revenue: 0 };
     return {
       ...activity,
-      averageSessionValue: safeRatio(activity.revenue, activity.sessions),
-      averageSessionDurationMinutes: safeRatio(activity.totalSeconds, activity.sessions, 1 / 60),
-      revenuePerHour: safeRatio(activity.revenue, activity.hours),
+      averageSessionValue: activity.operationsComplete ? safeRatio(activity.revenue, activity.sessions) : null,
+      averageSessionDurationMinutes: activity.operationsComplete && activity.durationComplete ? safeRatio(activity.totalSeconds, activity.sessions, 1 / 60) : null,
+      revenuePerHour: activity.durationComplete ? safeRatio(activity.revenue, activity.hours) : null,
       revenueShare: safeRatio(activity.revenue, totalRevenue, 100),
       revenueComparison: compareValues(activity.revenue, prior.revenue),
     };
@@ -159,6 +164,38 @@ export function expenseSummary(expenses, startDate, endDateExclusive) {
   };
 }
 
+export function expenseSummaryForPeriod(expenses, historicalDaily, startDate, endDateExclusive) {
+  if (!historicalDaily?.length) return { ...expenseSummary(expenses, startDate, endDateExclusive), complete: true, historicalDays: 0, unknownHistoricalExpenseDays: [] };
+  const imported = new Map(historicalDaily.map((record) => [record.businessDate, record]));
+  const categoryTotals = { RENT: 0, ELECTRICITY: 0, EMPLOYEES: 0, OTHER: 0 };
+  const records = [];
+  const unknownHistoricalExpenseDays = [];
+  let totalCosts = 0;
+  let historicalDays = 0;
+  for (let day = startDate; day < endDateExclusive; day = shiftDateKey(day, 1)) {
+    const historical = imported.get(day);
+    if (historical) {
+      historicalDays += 1;
+      if (historical.expensesUsd === null || historical.expensesUsd === undefined) {
+        unknownHistoricalExpenseDays.push(day);
+      } else totalCosts += Number(historical.expensesUsd) || 0;
+      continue;
+    }
+    const daily = expenseSummary(expenses, day, shiftDateKey(day, 1));
+    totalCosts += daily.totalCosts;
+    records.push(...daily.records);
+    for (const item of daily.breakdown) categoryTotals[item.category] += item.amount;
+  }
+  return {
+    totalCosts: roundMoney(totalCosts),
+    breakdown: Object.entries(categoryTotals).map(([category, amount]) => ({ category, amount: roundMoney(amount) })),
+    records,
+    complete: unknownHistoricalExpenseDays.length === 0,
+    historicalDays,
+    unknownHistoricalExpenseDays,
+  };
+}
+
 function applicableTarget(targets, dateKey) {
   return [...targets]
     .filter((target) => target.effectiveFrom <= dateKey)
@@ -196,9 +233,12 @@ export function targetForPeriod(targets, startDate, endDateExclusive) {
 }
 
 export function calculateStatuses(financial, previousFinancial, target) {
+  if (financial.netProfit === null) {
+    return { profitability: "unknown", trend: "unknown", target: target ? "unknown" : "no_target", overall: "gray", targetAchievement: null };
+  }
   const profitability = financial.netProfit > 0 ? "profitable" : financial.netProfit < 0 ? "loss" : "break_even";
-  const trendComparison = compareValues(financial.netProfit, previousFinancial.netProfit);
-  const trend = trendComparison.direction === "up" ? "growing" : trendComparison.direction === "down" ? "declining" : "stable";
+  const trendComparison = previousFinancial.netProfit === null ? null : compareValues(financial.netProfit, previousFinancial.netProfit);
+  const trend = !trendComparison ? "unknown" : trendComparison.direction === "up" ? "growing" : trendComparison.direction === "down" ? "declining" : "stable";
   const achievement = target?.netProfit > 0 ? safeRatio(financial.netProfit, target.netProfit, 100) : null;
   const meetsSupportingTargets = !target || (
     (financial.profitMargin ?? -Infinity) >= target.minimumProfitMargin

@@ -79,7 +79,9 @@ export function FinancialTrendChart({ query }) {
   const dayFacts = query.data.businessDays;
   const operations = query.data.operations;
   const showDayRange = dayFacts.observedDays > 1;
-  const description = query.data.period.selected === "daily"
+  const description = query.data.dataQuality?.includesHistoricalData && query.data.period.selected === "daily"
+    ? "Imported daily totals are included in the snapshot but are not assigned to fabricated hourly buckets."
+    : query.data.period.selected === "daily"
     ? "Revenue is bucketed by completion hour; recorded daily expenses are allocated across the displayed hours so totals reconcile."
     : "Backend-bucketed actual results for the selected business period.";
   return <section className="analytics-panel chart-panel financial-trend" aria-labelledby="financial-trend-title">

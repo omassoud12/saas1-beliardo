@@ -75,7 +75,25 @@ async function aggregateWithoutRpc(businessId, range, bucket, timezone) {
     rows.push(...(data ?? []));
     if (!data || data.length < pageSize) break;
   }
-  return aggregateSessionRows(rows, bucket, timezone);
+  return aggregateSessionRows(rows, bucket, timezone).map((row) => ({
+    ...row, is_historical: false, row_kind: "combined", operations_known: true,
+    duration_known: true, activity_operations_known: true,
+  }));
+}
+
+async function historicalAggregate(businessId, range, bucket, timezone) {
+  if (bucket === "hour") return [];
+  const { data, error } = await getSupabaseAdmin().rpc("get_business_historical_analytics", {
+    p_business_id: businessId,
+    p_from: range.from,
+    p_to: range.to,
+    p_bucket: bucket,
+    p_timezone: timezone,
+    p_business_day_start_hour: BUSINESS_DAY_START_HOUR,
+  });
+  if (error?.code === "PGRST202" && error.message?.includes("get_business_historical_analytics")) return [];
+  throwDatabaseError(error);
+  return (data ?? []).map((row) => ({ ...row, is_historical: true }));
 }
 
 export const businessRepository = {
@@ -92,7 +110,7 @@ export const businessRepository = {
   async aggregate(businessId, range, bucket, timezone) {
     // This RPC is intentionally executable by service_role only. The caller's
     // tenant is resolved by authentication before it reaches this repository.
-    const { data, error } = await getSupabaseAdmin().rpc("get_business_analytics", {
+    const liveRequest = getSupabaseAdmin().rpc("get_business_analytics", {
       p_business_id: businessId,
       p_from: range.from,
       p_to: range.to,
@@ -100,11 +118,34 @@ export const businessRepository = {
       p_timezone: timezone,
       p_business_day_start_hour: BUSINESS_DAY_START_HOUR,
     });
-    if (isAnalyticsRpcMissing(error)) {
-      return aggregateWithoutRpc(businessId, range, bucket, timezone);
+    const [liveResult, historicalRows] = await Promise.all([
+      liveRequest,
+      historicalAggregate(businessId, range, bucket, timezone),
+    ]);
+    if (isAnalyticsRpcMissing(liveResult.error)) {
+      return [...await aggregateWithoutRpc(businessId, range, bucket, timezone), ...historicalRows];
     }
-    throwBusinessDatabaseError(error);
-    return data ?? [];
+    throwBusinessDatabaseError(liveResult.error);
+    const liveRows = (liveResult.data ?? []).map((row) => ({
+      ...row, is_historical: false, row_kind: "combined", operations_known: true,
+      duration_known: true, activity_operations_known: true,
+    }));
+    return [...liveRows, ...historicalRows];
+  },
+
+  async listHistoricalCoverage(businessId, range) {
+    const startDate = range.startDate ?? String(range.from).slice(0, 10);
+    const endDateExclusive = range.endDateExclusive ?? String(range.to).slice(0, 10);
+    const { data, error } = await getSupabaseDataClient()
+      .from("business_historical_imports")
+      .select("coverage_start, coverage_end, coverage_mode")
+      .eq("business_id", businessId)
+      .eq("status", "active")
+      .lt("coverage_start", endDateExclusive)
+      .gte("coverage_end", startDate);
+    if (error?.code === "42P01" || error?.code === "PGRST205") return [];
+    throwDatabaseError(error);
+    return (data ?? []).map((row) => ({ start: row.coverage_start, end: row.coverage_end, mode: row.coverage_mode }));
   },
 
   async findDailySessions(businessId, range, { page = 1, pageSize = 50 } = {}) {

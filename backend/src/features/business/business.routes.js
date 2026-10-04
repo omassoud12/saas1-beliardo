@@ -15,6 +15,8 @@ import {
   validateTargetUpdate, validateYearlySummary,
 } from "./business.validation.js";
 import { analyticsRateLimiter, pdfDownloadRateLimiter, pdfGenerationRateLimiter } from "../../middleware/security.js";
+import { confirmHistoricalImport, listHistoricalImports, previewHistoricalImport } from "./business-historical.controller.js";
+import { validateHistoricalImport } from "./business-historical.validation.js";
 
 const router = Router();
 router.use(authenticate);
@@ -25,6 +27,9 @@ router.get("/yearly", analyticsRateLimiter, validateRequest(validateYearlySummar
 router.get("/analysis", analyticsRateLimiter, validateRequest(validateBusinessAnalysis), getBusinessAnalysis);
 router.get("/overview", analyticsRateLimiter, validateRequest(validateBusinessAnalysis), getBusinessOverview);
 router.get("/station-performance", analyticsRateLimiter, validateRequest(validateBusinessAnalysis), getStationPerformance);
+router.get("/historical/imports", validateRequest(validatePagination), listHistoricalImports);
+router.post("/historical/preview", analyticsRateLimiter, validateRequest(validateHistoricalImport), previewHistoricalImport);
+router.post("/historical/imports", analyticsRateLimiter, validateRequest(validateHistoricalImport), confirmHistoricalImport);
 router.get("/expenses/history", validateRequest(validatePagination), listBusinessExpenseHistory);
 router.get("/expenses", validateRequest(validatePagination), listBusinessExpenses);
 router.post("/expenses", validateRequest(validateExpense), createBusinessExpense);

@@ -11,6 +11,7 @@ import { TargetManager } from "../../components/business/TargetManager";
 import { useBusinessAnalysis, useBusinessOverview } from "../../hooks/useBusinessSummary";
 import { startOfWeek } from "../../utils/analytics";
 import { WeeklySummary } from "./WeeklySummary";
+import { HistoricalDataManager } from "../../components/business/HistoricalDataManager";
 
 const BUSINESS_THEME_KEY = "beliardo.business-theme";
 
@@ -46,7 +47,7 @@ export function BusinessAnalytics({ businessDate, businessId }) {
     : period === "weekly" ? { date: selectedWeek }
     : period === "monthly" ? { year: selectedYear, month: selectedMonth } : { year: selectedYear };
   const overviewQuery = useBusinessOverview(period, parameters, module === "summary", businessId);
-  const standaloneAnalysisQuery = useBusinessAnalysis(period, parameters, module !== "summary", businessId);
+  const standaloneAnalysisQuery = useBusinessAnalysis(period, parameters, ["activity", "expenses", "targets"].includes(module), businessId);
   const analysisQuery = module === "summary"
     ? { ...overviewQuery, data: overviewQuery.data?.analysis ?? null }
     : standaloneAnalysisQuery;
@@ -66,7 +67,8 @@ export function BusinessAnalytics({ businessDate, businessId }) {
         onModuleChange={setModule}
         onPeriodChange={setPeriod}
         onThemeChange={changeTheme}
-        action={period !== "weekly" && <BusinessReportExport
+        showPeriods={module !== "historical"}
+        action={module !== "historical" && period !== "weekly" && <BusinessReportExport
           reportType={period}
           date={selectedDate}
           year={selectedYear}
@@ -75,7 +77,7 @@ export function BusinessAnalytics({ businessDate, businessId }) {
         />}
       />
       <div id="business-module-panel" role="tabpanel" aria-labelledby={`business-module-tab-${module}`}>
-      <div id="business-period-panel" role="tabpanel" aria-labelledby={`business-period-tab-${period}`} tabIndex="0">
+      {module === "historical" ? <HistoricalDataManager businessId={businessId} /> : <div id="business-period-panel" role="tabpanel" aria-labelledby={`business-period-tab-${period}`} tabIndex="0">
       <div className="business-view business-view--center-header"><BusinessPeriodHeader
         module={module} period={period} date={selectedDate} year={selectedYear} month={selectedMonth}
         weekStart={selectedWeek} businessDate={businessDate} onDateChange={selectDate} onWeekChange={setSelectedWeek}
@@ -109,7 +111,7 @@ export function BusinessAnalytics({ businessDate, businessId }) {
       {module === "activity" && <ActivityPerformance query={analysisQuery} period={period} parameters={parameters} businessId={businessId} />}
       {module === "expenses" && <ExpenseManager businessDate={businessDate} analysisQuery={analysisQuery} businessId={businessId} />}
       {module === "targets" && <TargetManager businessDate={businessDate} analysisQuery={analysisQuery} businessId={businessId} />}
-      </div>
+      </div>}
       </div>
     </section>
   );

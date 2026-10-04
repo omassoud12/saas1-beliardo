@@ -21,14 +21,14 @@ export function MonthlyCalendar({ year, month, days = [], onSelectDay }) {
             type="button"
             role="gridcell"
             key={day.key}
-            className={day.total.sessions ? "calendar-day has-activity" : "calendar-day"}
+            className={day.total.sessions || day.total.revenue ? "calendar-day has-activity" : "calendar-day"}
             style={{ "--intensity": maxRevenue ? 0.08 + (day.total.revenue / maxRevenue) * 0.2 : 0 }}
             onClick={() => onSelectDay(day.key)}
-            aria-label={`${formatDate(day.key)}: ${day.total.sessions} sessions, ${formatHours(day.total.hours)}, ${formatCurrency(day.total.revenue)}`}
-            title={`${formatDate(day.key)}\n${formatHours(day.total.hours)} · ${formatCurrency(day.total.revenue)}`}
+            aria-label={day.dataQuality?.historicalCoverageUnknown ? `${formatDate(day.key)}: no historical record` : `${formatDate(day.key)}: ${day.dataQuality?.sessionDataComplete === false ? "session count unknown" : `${day.total.sessions} sessions`}, ${day.dataQuality?.durationDataComplete === false ? "duration unknown" : formatHours(day.total.hours)}, ${formatCurrency(day.total.revenue)}`}
+            title={`${formatDate(day.key)}\n${day.dataQuality?.durationDataComplete === false ? "Duration unknown" : formatHours(day.total.hours)} · ${formatCurrency(day.total.revenue)}`}
           >
             <span className="calendar-day__number">{Number(day.key.slice(-2))}</span>
-            {day.total.sessions ? <><strong>{formatCurrency(day.total.revenue)}</strong><small>{formatHours(day.total.hours)}</small></> : <small>No activity</small>}
+            {day.dataQuality?.historicalCoverageUnknown ? <small> No historical record</small> : day.total.sessions || day.total.revenue ? <><strong>{formatCurrency(day.total.revenue)}</strong><small>{day.dataQuality?.durationDataComplete === false ? "Duration unknown" : formatHours(day.total.hours)}</small></> : <small>No activity</small>}
           </button>
         ) : <div className="calendar-day calendar-day--empty" aria-hidden="true" key={`empty-${index}`} />)}
       </div>

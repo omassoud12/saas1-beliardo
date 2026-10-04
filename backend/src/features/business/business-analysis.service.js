@@ -4,7 +4,7 @@ import { businessRepository } from "./business.repository.js";
 import { businessAnalysisRepository } from "./business-analysis.repository.js";
 import {
   activityPerformance, aggregateActivities, calculateStatuses, compareValues,
-  daysBetween, expenseSummary, financialSummary, roundMoney, safeRatio, shiftDateKey, targetForPeriod,
+  daysBetween, expenseSummary, expenseSummaryForPeriod, financialSummary, roundMoney, safeRatio, shiftDateKey, targetForPeriod,
 } from "./business-analysis.calculations.js";
 import { historyRange, resolveAnalysisPeriods } from "./business-analysis.periods.js";
 import { buildInsights } from "./business-analysis.rules.js";
@@ -13,6 +13,8 @@ function revenueOf(rows) { return roundMoney(rows.reduce((sum, row) => sum + (Nu
 function sessionsOf(rows) { return rows.reduce((sum, row) => sum + (Number(row.session_count) || 0), 0); }
 function secondsOf(rows) { return rows.reduce((sum, row) => sum + (Number(row.total_seconds) || 0), 0); }
 function operations(rows, revenue) {
+  const sessionDataComplete = !rows.some((row) => row.is_historical && row.row_kind === "revenue" && row.operations_known !== true);
+  const durationDataComplete = !rows.some((row) => row.is_historical && row.row_kind === "revenue" && row.duration_known !== true);
   const completedSessions = sessionsOf(rows);
   const totalSeconds = secondsOf(rows);
   const totalHours = roundMoney(totalSeconds / 3600);
@@ -20,13 +22,16 @@ function operations(rows, revenue) {
   for (const row of rows) buckets.set(row.bucket_key, (buckets.get(row.bucket_key) ?? 0) + (Number(row.session_count) || 0));
   const peak = [...buckets.entries()].reduce((best, [key, sessions]) => sessions > best.sessions ? { key, sessions } : best, { key: null, sessions: 0 });
   return {
-    totalSessions: completedSessions,
-    completedSessions,
+    totalSessions: sessionDataComplete ? completedSessions : null,
+    completedSessions: sessionDataComplete ? completedSessions : null,
+    knownCompletedSessions: completedSessions,
     totalSeconds,
     totalHours,
-    averageSessionValue: safeRatio(revenue, completedSessions),
-    averageSessionDurationMinutes: safeRatio(totalSeconds, completedSessions, 1 / 60),
-    revenuePerHour: safeRatio(revenue, totalHours),
+    averageSessionValue: sessionDataComplete ? safeRatio(revenue, completedSessions) : null,
+    averageSessionDurationMinutes: sessionDataComplete && durationDataComplete ? safeRatio(totalSeconds, completedSessions, 1 / 60) : null,
+    revenuePerHour: durationDataComplete ? safeRatio(revenue, totalHours) : null,
+    sessionDataComplete,
+    durationDataComplete,
     peakActivity: peak.sessions,
     peakPeriod: peak.key,
   };
@@ -79,10 +84,10 @@ function rowsByBucket(rows) {
   return buckets;
 }
 
-function trendRecord(key, rows, expenses, startDate, endDateExclusive) {
+function trendRecord(key, rows, expenses, historicalDaily, startDate, endDateExclusive) {
   const activity = rows.get(key) ?? { revenue: 0, sessions: 0 };
-  const costs = expenseSummary(expenses, startDate, endDateExclusive);
-  const financial = financialSummary(activity.revenue, costs.totalCosts);
+  const costs = expenseSummaryForPeriod(expenses, historicalDaily, startDate, endDateExclusive);
+  const financial = financialSummary(activity.revenue, costs.totalCosts, costs.complete);
   return {
     key,
     ...financial,
@@ -100,7 +105,7 @@ function allocate(total, weights) {
   });
 }
 
-export function buildFinancialTrend(rows, expenses, range, period) {
+export function buildFinancialTrend(rows, expenses, range, period, historicalDaily = []) {
   const grouped = rowsByBucket(rows);
   if (period === "daily") {
     const starts = [];
@@ -110,13 +115,13 @@ export function buildFinancialTrend(rows, expenses, range, period) {
     if (!starts.length) return [];
     const duration = to - from;
     const weights = starts.map((start) => (Math.min(start + 3600000, to) - start) / duration);
-    const costs = expenseSummary(expenses, range.startDate, range.endDateExclusive);
+    const costs = expenseSummaryForPeriod(expenses, historicalDaily, range.startDate, range.endDateExclusive);
     const totals = Object.fromEntries(costs.breakdown.map((item) => [item.category, allocate(item.amount, weights)]));
     const expenseTotals = allocate(costs.totalCosts, weights);
     return starts.map((start, index) => {
       const key = new Date(start).toISOString();
       const activity = grouped.get(key.slice(0, 16)) ?? { revenue: 0, sessions: 0 };
-      const financial = financialSummary(activity.revenue, expenseTotals[index]);
+      const financial = financialSummary(activity.revenue, expenseTotals[index], costs.complete);
       return {
         key, ...financial, sessions: activity.sessions,
         expenseCategories: Object.fromEntries(Object.entries(totals).map(([category, values]) => [category, values[index]])),
@@ -129,7 +134,7 @@ export function buildFinancialTrend(rows, expenses, range, period) {
     for (let start = range.startDate.slice(0, 7); `${start}-01` < range.endDateExclusive;) {
       const startDate = `${start}-01`;
       const endDateExclusive = nextMonthStart(startDate);
-      result.push(trendRecord(start, grouped, expenses, startDate,
+      result.push(trendRecord(start, grouped, expenses, historicalDaily, startDate,
         endDateExclusive < range.endDateExclusive ? endDateExclusive : range.endDateExclusive));
       start = endDateExclusive.slice(0, 7);
     }
@@ -138,7 +143,7 @@ export function buildFinancialTrend(rows, expenses, range, period) {
 
   const result = [];
   for (let day = range.startDate; day < range.endDateExclusive; day = shiftDateKey(day, 1)) {
-    result.push(trendRecord(day, grouped, expenses, day, shiftDateKey(day, 1)));
+    result.push(trendRecord(day, grouped, expenses, historicalDaily, day, shiftDateKey(day, 1)));
   }
   return result;
 }
@@ -169,16 +174,17 @@ function average(values) {
   return values.length ? roundMoney(values.reduce((sum, value) => sum + value, 0) / values.length) : null;
 }
 
-function buildAverages(rows, expenses, range, currentDays) {
+function buildAverages(rows, expenses, historicalDaily, range, currentDays) {
   const grouped = groupByDay(rows);
   const daily = [];
   for (let day = range.startDate; day < range.endDateExclusive; day = shiftDateKey(day, 1)) {
     const dayRows = grouped.get(day) ?? [];
     const revenue = revenueOf(dayRows);
-    const costs = expenseSummary(expenses, day, shiftDateKey(day, 1)).totalCosts;
+    const costSummary = expenseSummaryForPeriod(expenses, historicalDaily, day, shiftDateKey(day, 1));
+    const costs = costSummary.totalCosts;
     const sessionCount = sessionsOf(dayRows);
     const hours = roundMoney(secondsOf(dayRows) / 3600);
-    daily.push({ day, revenue, costs, profit: roundMoney(revenue - costs), sessionCount, hours });
+    daily.push({ day, revenue, costs, profit: costSummary.complete ? roundMoney(revenue - costs) : null, sessionCount, hours, costsKnown: costSummary.complete });
   }
   const enough = daily.length >= 7;
   const sliceAverage = (count, field) => average(daily.slice(-count).map((item) => item[field]));
@@ -187,7 +193,8 @@ function buildAverages(rows, expenses, range, currentDays) {
   const totalHours = daily.reduce((sum, item) => sum + item.hours, 0);
   const dailyRevenue = enough ? average(daily.map((item) => item.revenue)) : null;
   const dailyCosts = enough ? average(daily.map((item) => item.costs)) : null;
-  const dailyProfit = enough ? average(daily.map((item) => item.profit)) : null;
+  const costsComplete = daily.every((item) => item.costsKnown);
+  const dailyProfit = enough && costsComplete ? average(daily.map((item) => item.profit)) : null;
   const completedMonths = new Map();
   const selectedMonth = range.endDateExclusive.slice(0, 7);
   for (const item of daily.filter((value) => value.day.slice(0, 7) < selectedMonth)) {
@@ -202,7 +209,7 @@ function buildAverages(rows, expenses, range, currentDays) {
   const previousThreeMonthAverage = priorMonths.length === 3 ? {
     revenue: average(priorMonths.map(([, item]) => item.revenue)),
     costs: average(priorMonths.map(([, item]) => item.costs)),
-    netProfit: average(priorMonths.map(([, item]) => item.profit)),
+    netProfit: costsComplete ? average(priorMonths.map(([, item]) => item.profit)) : null,
   } : null;
   return {
     status: enough ? "available" : "insufficient_history",
@@ -217,7 +224,7 @@ function buildAverages(rows, expenses, range, currentDays) {
     rolling7DayAverage: daily.length >= 7 ? sliceAverage(7, "revenue") : null,
     rolling30DayAverage: daily.length >= 30 ? sliceAverage(30, "revenue") : null,
     previousThreeMonthAverage,
-    scaledFinancial: enough ? financialSummary(dailyRevenue * currentDays, dailyCosts * currentDays) : null,
+    scaledFinancial: enough ? financialSummary(dailyRevenue * currentDays, dailyCosts * currentDays, costsComplete) : null,
   };
 }
 
@@ -225,8 +232,8 @@ function comparisonSet(current, previous) {
   return {
     totalRevenue: compareValues(current.totalRevenue, previous.totalRevenue),
     totalCosts: compareValues(current.totalCosts, previous.totalCosts),
-    netProfit: compareValues(current.netProfit, previous.netProfit),
-    profitMargin: compareValues(current.profitMargin ?? 0, previous.profitMargin ?? 0),
+    netProfit: current.netProfit === null || previous.netProfit === null ? null : compareValues(current.netProfit, previous.netProfit),
+    profitMargin: current.profitMargin === null || previous.profitMargin === null ? null : compareValues(current.profitMargin, previous.profitMargin),
   };
 }
 
@@ -257,6 +264,18 @@ function targetsForRange(repository, businessId, startDate, endDateExclusive) {
   return repository.listTargetsForRange
     ? repository.listTargetsForRange(businessId, { startDate, endDateExclusive })
     : repository.listTargets(businessId);
+}
+
+function historicalForRange(repository, businessId, startDate, endDateExclusive) {
+  return repository.listHistoricalDailyForRange
+    ? repository.listHistoricalDailyForRange(businessId, { startDate, endDateExclusive })
+    : Promise.resolve([]);
+}
+
+function historicalCoveragesForRange(repository, businessId, startDate, endDateExclusive) {
+  return repository.listHistoricalCoveragesForRange
+    ? repository.listHistoricalCoveragesForRange(businessId, { startDate, endDateExclusive })
+    : Promise.resolve([]);
 }
 
 function nextMonthStart(monthStart) {
@@ -296,18 +315,18 @@ function fullPeriodEnd(period, range) {
 
 function currentTargetWithLiveCosts(target, expenses) {
   if (!target) return null;
-  const netProfit = roundMoney(target.revenue - expenses.totalCosts);
+  const netProfit = expenses.complete === false ? null : roundMoney(target.revenue - expenses.totalCosts);
   return {
     ...target,
     storedNetProfit: target.netProfit,
     netProfit,
-    minimumProfitMargin: target.revenue > 0 ? roundMoney(netProfit / target.revenue * 100) : 0,
+    minimumProfitMargin: netProfit !== null && target.revenue > 0 ? roundMoney(netProfit / target.revenue * 100) : null,
   };
 }
 
-function buildDecisionSupport({ period, range, businessDate, financial, operations, averages, expenses, targets }) {
+function buildDecisionSupport({ period, range, businessDate, financial, operations, averages, expenses, historicalDaily, targets }) {
   const endDateExclusive = fullPeriodEnd(period, range);
-  const fullExpenses = expenseSummary(expenses, range.startDate, endDateExclusive);
+  const fullExpenses = expenseSummaryForPeriod(expenses, historicalDaily, range.startDate, endDateExclusive);
   const storedFullTarget = targetForPeriod(targets, range.startDate, endDateExclusive);
   if (!storedFullTarget) return {
     hasTarget: false,
@@ -317,7 +336,7 @@ function buildDecisionSupport({ period, range, businessDate, financial, operatio
       : businessDate < endDateExclusive ? daysBetween(businessDate, endDateExclusive) : 0,
   };
 
-  const expectedNetProfit = roundMoney(storedFullTarget.revenue - fullExpenses.totalCosts);
+  const expectedNetProfit = fullExpenses.complete ? roundMoney(storedFullTarget.revenue - fullExpenses.totalCosts) : null;
   const revenueRemaining = roundMoney(Math.max(0, storedFullTarget.revenue - financial.totalRevenue));
   const averageSessionValue = operations.averageSessionValue ?? averages.averageSessionValue;
   const daysRemaining = businessDate < range.startDate
@@ -336,7 +355,7 @@ function buildDecisionSupport({ period, range, businessDate, financial, operatio
     requiredDailyRevenue: daysRemaining > 0 ? roundMoney(revenueRemaining / daysRemaining) : null,
     averageSessionValue: averageSessionValue ? roundMoney(averageSessionValue) : null,
     requiredSessions: averageSessionValue > 0 ? Math.ceil(revenueRemaining / averageSessionValue) : null,
-    costBasisChanged: Math.abs(targetCostBasis - fullExpenses.totalCosts) >= 0.01,
+    costBasisChanged: fullExpenses.complete && Math.abs(targetCostBasis - fullExpenses.totalCosts) >= 0.01,
     targetCostBasis,
   };
 }
@@ -357,7 +376,7 @@ export function createBusinessAnalysisService({
       const history = historyRange(periods.current.startDate, createdDate, timezone);
       const dataStartDate = [periods.previous.startDate, periods.current.startDate, history.startDate].sort()[0];
       const dataEndDateExclusive = fullPeriodEnd(period, periods.current);
-      const [currentRows, previousRows, historyRows, expenses, targets, separateTrendRows, cancelledSessions] = await Promise.all([
+      const [currentRows, previousRows, historyRows, expenses, targets, separateTrendRows, cancelledSessions, historicalDaily, historicalCoverages] = await Promise.all([
         summaries.aggregate(businessId, periods.current, "day", timezone),
         summaries.aggregate(businessId, periods.previous, "day", timezone),
         history.days ? summaries.aggregate(businessId, history, "day", timezone) : [],
@@ -367,39 +386,49 @@ export function createBusinessAnalysisService({
           ? summaries.aggregate(businessId, periods.current, period === "daily" ? "hour" : "month", timezone)
           : null,
         summaries.countCancelled ? summaries.countCancelled(businessId, periods.current) : 0,
+        historicalForRange(repository, businessId, dataStartDate, dataEndDateExclusive),
+        historicalCoveragesForRange(repository, businessId, dataStartDate, dataEndDateExclusive),
       ]);
-      const currentExpense = expenseSummary(expenses, periods.current.startDate, periods.current.endDateExclusive);
-      const previousExpense = expenseSummary(expenses, periods.previous.startDate, periods.previous.endDateExclusive);
-      const financial = financialSummary(revenueOf(currentRows), currentExpense.totalCosts);
-      const previousFinancial = financialSummary(revenueOf(previousRows), previousExpense.totalCosts);
+      const currentExpense = expenseSummaryForPeriod(expenses, historicalDaily, periods.current.startDate, periods.current.endDateExclusive);
+      const previousExpense = expenseSummaryForPeriod(expenses, historicalDaily, periods.previous.startDate, periods.previous.endDateExclusive);
+      const currentCoverages = historicalCoverages.filter((item) => item.start < periods.current.endDateExclusive && item.end >= periods.current.startDate);
+      const revenueCoverageUnknown = period === "daily" && currentRows.length === 0
+        && currentCoverages.some((item) => item.mode === "partial");
+      const financial = financialSummary(revenueOf(currentRows), currentExpense.totalCosts, currentExpense.complete && !revenueCoverageUnknown);
+      const previousFinancial = financialSummary(revenueOf(previousRows), previousExpense.totalCosts, previousExpense.complete);
       const currentOperations = operations(currentRows, financial.totalRevenue);
       currentOperations.cancelledSessions = Number(cancelledSessions) || 0;
-      currentOperations.cancellationRate = safeRatio(
+      currentOperations.cancellationRate = currentOperations.completedSessions === null ? null : safeRatio(
         currentOperations.cancelledSessions,
         currentOperations.completedSessions + currentOperations.cancelledSessions,
         100,
       );
       const previousOperations = operations(previousRows, previousFinancial.totalRevenue);
-      const averages = buildAverages(historyRows, expenses, history, periods.current.days);
+      const averages = buildAverages(historyRows, expenses, historicalDaily, history, periods.current.days);
       const storedTarget = targetForPeriod(targets, periods.current.startDate, periods.current.endDateExclusive);
       const target = currentTargetWithLiveCosts(storedTarget, currentExpense);
       const statuses = calculateStatuses(financial, previousFinancial, target);
       if (financial.totalRevenue === 0 && currentExpense.totalCosts === 0 && currentOperations.completedSessions === 0) statuses.overall = "gray";
-      const activities = activityPerformance(currentRows, previousRows);
+      const activities = activityPerformance(currentRows, previousRows, financial.totalRevenue);
       const decisionSupport = buildDecisionSupport({
         period, range: periods.current, businessDate, financial, operations: currentOperations,
-        averages, expenses, targets,
+        averages, expenses, historicalDaily, targets,
       });
-      const insights = buildInsights({
+      const insights = financial.netProfit === null ? [{
+        type: "warning", code: "historical_expenses_unknown", title: "Profit is unavailable",
+        message: "One or more imported historical days do not include expense totals, so profit was not estimated.",
+        evidence: { unknownExpenseDays: currentExpense.unknownHistoricalExpenseDays },
+      }] : buildInsights({
         financial, previousFinancial, operations: currentOperations, previousOperations,
         activities, target, statuses, averages, decisionSupport,
       });
       const trendRows = separateTrendRows ?? currentRows;
+      const currentHistorical = historicalDaily.filter((record) => record.businessDate >= periods.current.startDate && record.businessDate < periods.current.endDateExclusive);
       return {
         period: { selected: period, businessDate, timezone, currency: "USD", ...periods.current },
         financial,
         operations: currentOperations,
-        trend: buildFinancialTrend(trendRows, expenses, periods.current, period),
+        trend: buildFinancialTrend(trendRows, expenses, periods.current, period, historicalDaily),
         businessDays: strongestAndWeakestDays(currentRows),
         activities,
         expenses: currentExpense,
@@ -407,13 +436,14 @@ export function createBusinessAnalysisService({
         comparisons: {
           previousPeriod: {
             ...comparisonSet(financial, previousFinancial),
-            completedSessions: compareValues(currentOperations.completedSessions, previousOperations.completedSessions),
+            completedSessions: currentOperations.completedSessions === null || previousOperations.completedSessions === null
+              ? null : compareValues(currentOperations.completedSessions, previousOperations.completedSessions),
           },
           historicalAverage: averages.scaledFinancial ? comparisonSet(financial, averages.scaledFinancial) : null,
           target: target ? {
             values: target,
             revenue: compareValues(financial.totalRevenue, target.revenue),
-            netProfit: compareValues(financial.netProfit, target.netProfit),
+            netProfit: financial.netProfit === null || target.netProfit === null ? null : compareValues(financial.netProfit, target.netProfit),
           } : null,
         },
         statuses,
@@ -423,6 +453,14 @@ export function createBusinessAnalysisService({
           hasEnoughHistory: averages.status === "available",
           hasTarget: Boolean(target),
           targetCostBasisChanged: Boolean(decisionSupport.costBasisChanged),
+          includesHistoricalData: currentExpense.historicalDays > 0 || currentRows.some((row) => row.is_historical) || currentCoverages.length > 0,
+          historicalCoveragePartial: currentHistorical.some((row) => row.coverageMode === "partial") || currentCoverages.some((item) => item.mode === "partial"),
+          revenueCoverageUnknown,
+          expensesComplete: currentExpense.complete,
+          unknownHistoricalExpenseDays: currentExpense.unknownHistoricalExpenseDays,
+          sessionDataComplete: currentOperations.sessionDataComplete,
+          durationDataComplete: currentOperations.durationDataComplete,
+          hourlyTrendIncludesHistoricalData: false,
         },
       };
     },

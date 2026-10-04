@@ -31,7 +31,7 @@ function YearlyContent({ data, year, onSelectMonth, analysisQuery }) {
     <>
       <KpiGrid eyebrow="Operations · التشغيل" title="Year activity · نشاط السنة" items={[
         { label: "Tracked Days · الأيام المسجلة", value: metrics.trackedDays, description: "Unique days with activity · أيام فيها نشاط مكتمل", icon: "#" },
-        { label: "Yearly Hours · ساعات السنة", value: formatHours(metrics.totalHours), description: "Combined completed usage · إجمالي الاستخدام المكتمل", icon: "h" },
+        { label: "Yearly Hours · ساعات السنة", value: metrics.totalHours === null ? "Unknown" : formatHours(metrics.totalHours), description: metrics.totalHours === null ? "Not supplied by the historical import" : "Combined completed usage · إجمالي الاستخدام المكتمل", icon: "h" },
       ]} />
       <section className="analytics-panel yearly-months" aria-labelledby="month-summary-title">
         <div className="analytics-panel__heading"><div><p className="eyebrow">Year at a glance</p><h3 id="month-summary-title">Monthly summary</h3></div><p>Select a month to inspect its daily performance.</p></div>
@@ -39,8 +39,8 @@ function YearlyContent({ data, year, onSelectMonth, analysisQuery }) {
           {data.months.map((item, index) => (
             <button type="button" key={item.key} onClick={() => onSelectMonth(index + 1)} aria-label={`Open ${formatMonth(year, index + 1)} summary`}>
               <span>{formatMonth(year, index + 1, { month: "long" })}</span>
-              <strong>{formatCurrency(item.total.revenue)}</strong>
-              <small>{formatHours(item.total.hours)} · {item.total.sessions} sessions</small>
+              <strong>{item.dataQuality?.historicalCoverageUnknown ? "Unknown" : formatCurrency(item.total.revenue)}</strong>
+              <small>{item.dataQuality?.historicalCoverageUnknown ? "No historical record" : <>{item.dataQuality?.durationDataComplete === false ? "Duration unknown" : formatHours(item.total.hours)} · {item.dataQuality?.sessionDataComplete === false ? "sessions unknown" : `${item.total.sessions} sessions`}</>}</small>
               <div className="month-activity-mini">
                 {item.activities.map((activity) => <span key={activity.type}><i className={`activity-dot activity-dot--${activity.type}`} />{ACTIVITY_META[activity.type]?.short ?? activity.label} {formatCurrency(activity.revenue)}</span>)}
               </div>
