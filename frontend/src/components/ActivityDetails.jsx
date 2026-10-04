@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { STATION_TYPES } from "../data/stationTypes";
-import { fetchTodayActivities } from "../lib/api";
+import { editCompletedSession, fetchTodayActivities } from "../lib/api";
 import { formatDuration, formatMoney } from "../utils/session";
 import { ChevronDownIcon } from "./icons";
 
@@ -14,6 +14,31 @@ function formatStartTime(value, timezone) {
 }
 
 export function ActivityDetails({ currentBusinessDate, refreshKey, timezone = "UTC" }) {
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+  function beginEdit(activity) {
+    const seconds = Number(activity.finalElapsedSeconds) || 0;
+    setEditing({ id: activity.id, expectedUpdatedAt: activity.updatedAt,
+      hours: Math.floor(seconds / 3600), minutes: Math.floor(seconds % 3600 / 60), seconds: seconds % 60,
+      cost: Number(activity.finalCost).toFixed(2) });
+    setEditError("");
+  }
+  async function saveEdit(event) {
+    event.preventDefault();
+    if (saving) return;
+    setSaving(true); setEditError("");
+    try {
+      const session = await editCompletedSession(editing.id, {
+        durationSeconds: Number(editing.hours) * 3600 + Number(editing.minutes) * 60 + Number(editing.seconds),
+        finalCost: Number(editing.cost), expectedUpdatedAt: editing.expectedUpdatedAt,
+      });
+      setState(current => ({ ...current, activities: current.activities.map(activity => activity.id === session.id
+        ? { ...activity, finalElapsedSeconds: session.finalElapsedSeconds, finalCost: session.finalCost, updatedAt: session.updatedAt } : activity) }));
+      setEditing(null);
+    } catch (error) { setEditError(error.message || "Unable to save session"); }
+    finally { setSaving(false); }
+  }
   const [open, setOpen] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [state, setState] = useState({
@@ -115,6 +140,7 @@ export function ActivityDetails({ currentBusinessDate, refreshKey, timezone = "U
                 <span role="columnheader">Started</span>
                 <span role="columnheader">Hours</span>
                 <span role="columnheader">Cost</span>
+                <span role="columnheader">Actions</span>
               </div>
               {state.activities.map((activity) => (
                 <div className="activity-list__row" role="row" key={activity.id}>
@@ -128,10 +154,20 @@ export function ActivityDetails({ currentBusinessDate, refreshKey, timezone = "U
                   <span className="activity-list__started" role="cell" data-label="Started">{formatStartTime(activity.startedAt, timezone)}</span>
                   <span className="activity-list__duration" role="cell" data-label="Hours">{formatDuration(activity.finalElapsedSeconds)}</span>
                   <span className="activity-list__cost" role="cell" data-label="Cost">{formatMoney(activity.finalCost)}</span>
+                  <span className="activity-list__actions" role="cell"><button type="button" className="button button--secondary" tabIndex={open ? 0 : -1} disabled={saving} onClick={() => beginEdit(activity)} aria-label={`Edit ${STATION_TYPES[activity.type]?.label ?? "session"} station ${activity.stationNumber}`}>Edit</button></span>
                 </div>
               ))}
             </div>
           )}
+          {editing && open && <form className="activity-edit" onSubmit={saveEdit} aria-label="Edit completed session">
+            <strong>Edit session</strong>
+            <p>Correct the billed duration and cost. Original start and end times are retained.</p>
+            <div className="activity-edit__fields">
+              {[['hours', 'Hours', 8760], ['minutes', 'Minutes', 59], ['seconds', 'Seconds', 59], ['cost', 'Cost (USD)', 9999999999.99]].map(([key, label, max]) => <label key={key}>{label}<input type="number" required min="0" max={max} step={key === 'cost' ? '0.01' : '1'} value={editing[key]} disabled={saving} onChange={event => setEditing(current => ({ ...current, [key]: event.target.value }))} /></label>)}
+            </div>
+            {editError && <p role="alert">{editError}</p>}
+            <div className="activity-edit__buttons"><button className="button" type="submit" disabled={saving}>{saving ? 'Saving...' : 'Save changes'}</button><button className="button button--secondary" type="button" disabled={saving} onClick={() => setEditing(null)}>Cancel</button></div>
+          </form>}
         </div>
       </div>
     </section>

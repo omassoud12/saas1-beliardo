@@ -374,6 +374,7 @@ test("Home activity details use the current tenant-local 06:00 business day", as
         finalElapsedSeconds: 5400,
         finalCost: 15,
         endedAt: "2026-08-26T23:00:00.000Z",
+        updatedAt: "2026-08-26T23:00:00.123456Z",
         createdBy: "private-user-id",
       }];
     },
@@ -402,6 +403,7 @@ test("Home activity details use the current tenant-local 06:00 business day", as
     finalElapsedSeconds: 5400,
     finalCost: 15,
     endedAt: "2026-08-26T23:00:00.000Z",
+    updatedAt: "2026-08-26T23:00:00.123456Z",
   }]);
 });
 

@@ -122,3 +122,5 @@ export async function deleteSession(request, response, next) {
     return sendSuccess(response, { data: {}, message: "Session deleted" });
   } catch (error) { return next(error); }
 }
+
+export const editCompletedSession = action("editCompleted", "Session corrected");

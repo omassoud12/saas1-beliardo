@@ -147,3 +147,13 @@ export function validateCompletedSessions(request) {
   }
   return errors.length ? failure(...errors) : success({ from: from.value, to: to.value, limit });
 }
+
+export function validateCompletedSessionEdit(request) {
+  const errors = [...(validateSessionId(request).errors ?? [])];
+  const { durationSeconds, finalCost, expectedUpdatedAt } = request.body ?? {};
+  if (!Number.isSafeInteger(durationSeconds) || durationSeconds < 0 || durationSeconds > 31536000) errors.push("Duration must be between 0 and 365 days");
+  if (typeof finalCost !== "number" || !Number.isFinite(finalCost) || finalCost < 0 || finalCost > 9999999999.99 || Math.abs(finalCost * 100 - Math.round(finalCost * 100)) > 0.0001) errors.push("Cost must be a non-negative amount with at most two decimal places");
+  const timestamp = parseTimestamp(expectedUpdatedAt, "expectedUpdatedAt");
+  if (timestamp.error || !timestamp.value) errors.push("expectedUpdatedAt is required and must be a valid timestamp");
+  return errors.length ? failure(...errors) : success({ sessionId: request.params.id, durationSeconds, finalCost, expectedUpdatedAt });
+}

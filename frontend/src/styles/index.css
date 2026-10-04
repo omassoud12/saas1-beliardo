@@ -5091,3 +5091,20 @@ button.calendar-day:hover {
   .historical-preview__summary { grid-template-columns: 1fr; }
   .historical-records-mobile dl { grid-template-columns: 1fr; }
 }
+
+.activity-list__head, .activity-list__row { grid-template-columns: minmax(150px, 1.3fr) repeat(4, minmax(72px, .75fr)) 72px; }
+.activity-list__actions { text-align: right; }
+.activity-list__actions button { padding: 6px 10px; font-size: .75rem; }
+.activity-edit { margin-top: 16px; padding: 18px; border: 1px solid var(--border); border-radius: 8px; }
+.activity-edit p { color: var(--muted); font-size: .8rem; }
+.activity-edit__fields { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.activity-edit label { display: grid; gap: 6px; font-size: .8rem; }
+.activity-edit input { width: 100%; padding: 10px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg, #111); color: var(--text); }
+.activity-edit__buttons { display: flex; gap: 10px; margin-top: 16px; }
+@media (max-width: 620px) {
+  .activity-list__row { grid-template-columns: repeat(3, minmax(0, 1fr)); grid-template-areas: "type type cost" "station started duration" "actions actions actions"; }
+  .activity-list__actions { grid-area: actions; }
+  .activity-edit__fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+.activity-list { overflow-x: auto; }

@@ -250,3 +250,8 @@ export async function removePlatformUser(userId) {
 export async function updatePlatformUserStatus(userId, action) {
   await apiRequest(`/platform/users/${userId}/status`, { method: "PATCH", body: JSON.stringify({ action }) });
 }
+
+export async function editCompletedSession(sessionId, values) {
+  const payload = await apiRequest(`/sessions/${sessionId}/completed`, { method: "PATCH", body: JSON.stringify(values) });
+  return payload.data.session;
+}

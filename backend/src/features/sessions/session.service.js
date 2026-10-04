@@ -156,6 +156,7 @@ export function createSessionService({
         finalElapsedSeconds: session.finalElapsedSeconds,
         finalCost: session.finalCost,
         endedAt: session.endedAt,
+        updatedAt: session.updatedAt,
       }));
     },
 
@@ -229,6 +230,16 @@ export function createSessionService({
       if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
       if (result.outcome === "invalid_time") throw new AppError(400, "Resume time is invalid", "INVALID_RESUME_TIME");
       if (result.outcome !== "resumed" || !result.session) throw new AppError(409, "Only a paused session can be resumed", "INVALID_SESSION_TRANSITION");
+      return present(result.session);
+    },
+
+    async editCompleted({ businessId, sessionId, userId, durationSeconds, finalCost, expectedUpdatedAt }) {
+      const result = await sessions.editCompleted({ businessId, sessionId, userId, durationSeconds, finalCost, expectedUpdatedAt });
+      if (result.outcome === "forbidden") throw new AppError(403, "Session editing is not permitted", "FORBIDDEN");
+      if (result.outcome === "not_found") throw new AppError(404, "Session not found", "SESSION_NOT_FOUND");
+      if (result.outcome === "stale") throw new AppError(409, "This session changed. Refresh activity details and try again.", "SESSION_CHANGED");
+      if (result.outcome === "invalid_values") throw new AppError(400, "Invalid duration or cost", "INVALID_SESSION_VALUES");
+      if (result.outcome !== "updated" || !result.session) throw new AppError(409, "Only completed sessions can be corrected", "INVALID_SESSION_TRANSITION");
       return present(result.session);
     },
 

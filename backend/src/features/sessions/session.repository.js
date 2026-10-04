@@ -142,6 +142,17 @@ export const sessionRepository = {
     return data.map(mapSession);
   },
 
+  async editCompleted(values) {
+    const { data, error } = await getSupabaseAdmin().rpc("edit_completed_session_atomic", {
+      p_business_id: values.businessId, p_session_id: values.sessionId,
+      p_actor_user_id: values.userId, p_duration_seconds: values.durationSeconds,
+      p_final_cost: values.finalCost, p_expected_updated_at: values.expectedUpdatedAt,
+    });
+    throwDatabaseError(error);
+    const result = data?.[0] ?? { outcome: "not_found" };
+    return { outcome: result.outcome, session: mapSession(result.session_record) };
+  },
+
   async update(businessId, sessionId, values) {
     const { data, error } = await getSupabaseAdmin().rpc("update_open_session_atomic", {
       p_business_id: businessId,
